@@ -1,0 +1,175 @@
+<?php if ( forminator_array_value_exists( $properties, 'visual_style' ) && ( $properties['visual_style'] == 'grid' ) ) { ?>
+
+	<?php if ( isset( $properties['enable_images'] ) && $properties['enable_images'] == '1' ) { ?>
+
+		<?php
+			// Determine custom image dimensions if set.
+			$has_custom_size   = forminator_array_value_exists( $properties, 'field-image-size' ) && 'auto' !== $properties['field-image-size'];
+			$custom_img_width  = ( $has_custom_size && ! empty( $properties['field-image-width'] ) ) ? intval( $properties['field-image-width'] ) : 0;
+			$custom_img_height = ( $has_custom_size && ! empty( $properties['field-image-height'] ) ) ? intval( $properties['field-image-height'] ) : 0;
+
+			// Mobile defaults: 150px padding-top, 140px image height.
+			$grid_img_height_mobile    = ( $custom_img_height > 0 ) ? $custom_img_height : 140;
+			$grid_padding_top_mobile   = $grid_img_height_mobile + 10;
+
+			// Desktop defaults: 250px padding-top, 240px image height.
+			$grid_img_height_desktop   = ( $custom_img_height > 0 ) ? $custom_img_height : 240;
+			$grid_padding_top_desktop  = $grid_img_height_desktop + 10;
+		?>
+
+		#forminator-module-<?php echo $properties['form_id'] ?> .forminator-poll--grid {
+			display: -webkit-box;
+			display: -ms-flexbox;
+			display: flex;
+			-ms-flex-wrap: wrap;
+			flex-wrap: wrap;
+			<?php if ( isset( $properties['answers-spacing'] ) && $properties['answers-spacing'] == 'open' ) { ?>
+				margin: -10px;
+			<?php } else if ( isset( $properties['answers-spacing'] ) && $properties['answers-spacing'] == 'enclosed' ) { ?>
+				margin: -5px;
+			<?php } else if ( isset( $properties['answers-spacing'] ) && $properties['answers-spacing'] == 'custom' ) { ?>
+				<?php if ( $properties['spacing'] != '' ) { ?>
+					margin: -<?php echo ($properties['spacing'] / 2) ?>px;
+				<?php } ?>
+			<?php } else { ?>
+				margin: -10px;
+			<?php } ?>
+		}
+
+		#forminator-module-<?php echo $properties['form_id'] ?> .forminator-poll--column {
+			width: 50%;
+			display: block;
+			-ms-flex: 0 0 auto;
+			flex: 0 0 auto;
+			box-sizing: border-box;
+			<?php if ( isset( $properties['answers-spacing'] ) && $properties['answers-spacing'] == 'open' ) { ?>
+				padding: 10px;
+			<?php } else if ( isset( $properties['answers-spacing'] ) && $properties['answers-spacing'] == 'enclosed' ) { ?>
+				padding: 5px;
+			<?php } else if ( isset( $properties['answers-spacing'] ) && $properties['answers-spacing'] == 'custom' ) { ?>
+				<?php if ( $properties['spacing'] != '' ) { ?>
+					padding: <?php echo ($properties['spacing'] / 2) ?>px;
+				<?php } ?>
+			<?php } else { ?>
+				padding: 10px;
+			<?php } ?>
+		}
+
+		<?php if ( forminator_array_value_exists( $properties, 'forminator-poll-design' ) ) { ?>
+			<?php if ( $properties['forminator-poll-design'] != 'basic' ) { ?>
+				#forminator-module-<?php echo $properties['form_id'] ?> .forminator-poll--column .forminator-radio.forminator-has_image {
+					position: relative;
+					padding-top: calc(<?php echo $grid_padding_top_mobile ?>px + 15px);
+				}
+			<?php } ?>
+		<?php } else { ?>
+			#forminator-module-<?php echo $properties['form_id'] ?> .forminator-poll--column .forminator-radio.forminator-has_image {
+				position: relative;
+				padding-top: calc(<?php echo $grid_padding_top_mobile ?>px + 15px);
+			}
+		<?php } ?>
+
+		#forminator-module-<?php echo $properties['form_id'] ?> .forminator-poll--column .forminator-radio.forminator-has_image .forminator-radio-bullet {
+			align-self: flex-start;
+		}
+
+		#forminator-module-<?php echo $properties['form_id'] ?> .forminator-poll--column .forminator-radio.forminator-has_image:not(.forminator-has_bullet) {
+			margin-bottom: 0;
+		}
+
+		#forminator-module-<?php echo $properties['form_id'] ?> .forminator-poll--column .forminator-radio.forminator-has_image .forminator-radio-bullet {
+			margin-left: 0;
+		}
+
+		<?php if ( forminator_array_value_exists( $properties, 'forminator-poll-design' ) ) { ?>
+			<?php if ( $properties['forminator-poll-design'] != 'basic' ) { ?>
+				#forminator-module-<?php echo $properties['form_id'] ?> .forminator-poll--column .forminator-radio.forminator-has_image .forminator-radio-image {
+					<?php if ( $custom_img_width > 0 ) { ?>
+						width: <?php echo $custom_img_width ?>px;
+						max-width: 100%;
+					<?php } else { ?>
+						width: 100%;
+					<?php } ?>
+					position: absolute;
+					top: 0;
+					left: 0;
+				}
+
+				#forminator-module-<?php echo $properties['form_id'] ?> .forminator-poll--column .forminator-radio.forminator-has_image .forminator-radio-image span {
+					width: 100%;
+					height: <?php echo $grid_img_height_mobile ?>px;
+					background-size: cover;
+					background-position: center;
+				}
+			<?php } else { ?>
+				#forminator-module-<?php echo $properties['form_id'] ?> .forminator-poll--column .forminator-radio.forminator-has_image .forminator-radio-image {
+					<?php if ( $custom_img_width > 0 ) { ?>
+						width: <?php echo $custom_img_width ?>px;
+						max-width: 100%;
+					<?php } else { ?>
+						width: 100%;
+					<?php } ?>
+					display: block;
+				}
+			<?php } ?>
+		<?php } else { ?>
+			#forminator-module-<?php echo $properties['form_id'] ?> .forminator-poll--column .forminator-radio.forminator-has_image .forminator-radio-image {
+				<?php if ( $custom_img_width > 0 ) { ?>
+					width: <?php echo $custom_img_width ?>px;
+					max-width: 100%;
+				<?php } else { ?>
+					width: 100%;
+				<?php } ?>
+				position: absolute;
+				top: 0;
+				left: 0;
+			}
+
+			#forminator-module-<?php echo $properties['form_id'] ?> .forminator-poll--column .forminator-radio.forminator-has_image .forminator-radio-image span {
+				width: 100%;
+				height: <?php echo $grid_img_height_mobile ?>px;
+				background-size: cover;
+				background-position: center;
+			}
+		<?php } ?>
+
+		/* START: Desktop only */
+		@media (min-width: 783px) {
+
+			#forminator-module-<?php echo $properties['form_id'] ?>:not(.forminator-size--small) .forminator-poll--column {
+				<?php if ( forminator_array_value_exists( $properties, 'poll-grid-cols' ) ) { ?>
+					<?php if ( $properties['poll-grid-cols'] != '' ) { ?>
+						width: <?php echo (100 / $properties['poll-grid-cols']) ?>%;
+					<?php } else { ?>
+						width: 33.33%;
+					<?php } ?>
+				<?php } else { ?>
+					width: 33.33%;
+				<?php } ?>
+			}
+
+			<?php if ( forminator_array_value_exists( $properties, 'forminator-poll-design' ) ) { ?>
+				<?php if ( $properties['forminator-poll-design'] != 'basic' ) { ?>
+					#forminator-module-<?php echo $properties['form_id'] ?>:not(.forminator-size--small) .forminator-poll--column .forminator-radio.forminator-has_image {
+						padding-top: calc(<?php echo $grid_padding_top_desktop ?>px + 15px);
+					}
+
+					#forminator-module-<?php echo $properties['form_id'] ?>:not(.forminator-size--small) .forminator-poll--column .forminator-radio.forminator-has_image .forminator-radio-image span {
+						height: <?php echo $grid_img_height_desktop ?>px;
+					}
+				<?php } ?>
+			<?php } else { ?>
+				#forminator-module-<?php echo $properties['form_id'] ?>:not(.forminator-size--small) .forminator-poll--column .forminator-radio.forminator-has_image {
+					padding-top: calc(<?php echo $grid_padding_top_desktop ?>px + 15px);
+				}
+
+				#forminator-module-<?php echo $properties['form_id'] ?>:not(.forminator-size--small) .forminator-poll--column .forminator-radio.forminator-has_image .forminator-radio-image span {
+					height: <?php echo $grid_img_height_desktop ?>px;
+				}
+			<?php } ?>
+		}
+		/* END: Desktop only */
+
+	<?php } ?>
+
+<?php } ?>

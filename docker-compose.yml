@@ -1,0 +1,62 @@
+services:
+  db:
+    image: mariadb:10.11
+    container_name: gripco-db
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./mwp_db:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "3306:3306"
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  wordpress:
+    image: wordpress:6.4.3-php8.2-apache
+    container_name: gripco-wordpress
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_TABLE_PREFIX: wp_an4rpmm56b_
+      WP_LOCAL_URL: http://localhost:8000
+    volumes:
+      - .:/var/www/html
+    ports:
+      - "8000:80"
+    restart: unless-stopped
+
+  url-migrate:
+    image: wordpress:cli-php8.2
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_TABLE_PREFIX: wp_an4rpmm56b_
+      WP_LOCAL_URL: http://localhost:8000
+    volumes:
+      - .:/var/www/html
+    working_dir: /var/www/html
+    command:
+      - /bin/sh
+      - -c
+      - wp search-replace 'https://gripcosaudia.com' 'http://localhost:8000' --all-tables-with-prefix --precise --skip-columns=guid --allow-root
+
+volumes:
+  db_data:

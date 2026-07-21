@@ -1,0 +1,29 @@
+.elementor-229 .elementor-element.elementor-element-6d79b3ec{--display:flex;--margin-top:50px;--margin-bottom:0px;--margin-left:0px;--margin-right:0px;}.elementor-229 .elementor-element.elementor-element-8f1b603 .aux-widget-inner > *{text-align:center;margin-left:auto !important;margin-right:auto !important;}.elementor-229 .elementor-element.elementor-element-8f1b603 .aux-modern-heading-primary{font-family:"Mukta", Sans-serif;font-size:18px;font-weight:400;text-transform:capitalize;letter-spacing:1.08px;color:var( --e-global-color-accent );margin:0px 0px 30px 0px;}.elementor-229 .elementor-element.elementor-element-8f1b603 .aux-modern-heading-secondary{font-family:"Heebo", Sans-serif;font-size:43px;font-weight:700;line-height:1.2em;color:var( --e-global-color-accent );}.elementor-229 .elementor-element.elementor-element-8f1b603 .aux-modern-heading-secondary .aux-head-highlight{font-family:"Heebo", Sans-serif;font-size:43px;font-weight:700;color:var( --e-global-color-78b4c45 );}.elementor-229 .elementor-element.elementor-element-8f1b603 .aux-modern-heading-divider{height:2px;width:25px;margin:0px 0px 30px 0px;background-color:#A2A2A2;}.elementor-229 .elementor-element.elementor-element-8f1b603{animation-duration:2500ms;animation-timing-function:cubic-bezier(0.165,0.84,0.44,1);}.elementor-229 .elementor-element.elementor-element-97bc2b6{--display:flex;--flex-direction:column;--container-widget-width:100%;--container-widget-height:initial;--container-widget-flex-grow:0;--container-widget-align-self:initial;--flex-wrap-mobile:wrap;--margin-top:0px;--margin-bottom:0px;--margin-left:0px;--margin-right:0px;--padding-top:0px;--padding-bottom:100px;--padding-left:100px;--padding-right:100px;}.elementor-229 .elementor-element.elementor-element-10fc87d.elementor-element{--flex-grow:1;--flex-shrink:1;}@media(max-width:1024px){.elementor-229 .elementor-element.elementor-element-8f1b603 .aux-modern-heading-primary{font-size:16px;}.elementor-229 .elementor-element.elementor-element-8f1b603 .aux-modern-heading-secondary{font-size:34px;}.elementor-229 .elementor-element.elementor-element-8f1b603 .aux-modern-heading-secondary .aux-head-highlight{font-size:34px;}}@media(max-width:767px){.elementor-229 .elementor-element.elementor-element-8f1b603 .aux-modern-heading-secondary{font-size:30px;max-width:300px;}.elementor-229 .elementor-element.elementor-element-8f1b603 .aux-modern-heading-secondary .aux-head-highlight{font-size:30px;}}/* Start custom CSS for aux_modern_heading, class: .elementor-element-8f1b603 */.elementor-229 .elementor-element.elementor-element-8f1b603 .aux-modern-heading-primary:before{
+    content: '';
+    width: 8px;
+    height: 8px;
+    background-color:#379237;
+    display: inline-block;
+    margin-right: 10px; 
+    position: relative;
+    top: -3px;
+}
+.elementor-229 .elementor-element.elementor-element-8f1b603 .aux-modern-heading-divider:after{
+    content: '';
+    width: 90px;
+    height: 2px;
+    background-color:#379237;
+    display: block;
+    position: relative;
+    left: 35px;
+}
+.elementor-229 .elementor-element.elementor-element-8f1b603 .aux-modern-heading-divider{
+    position: relative;
+    left: -50px;
+}/* End custom CSS */
+/* Start custom CSS for container, class: .elementor-element-97bc2b6 */@media only screen and (max-width: 768px) {
+.elementor-229 .elementor-element.elementor-element-97bc2b6{
+    padding-left: 10px;
+    padding-right: 10px;
+}
+}/* End custom CSS */
