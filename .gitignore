@@ -1,0 +1,68 @@
+# Runtime secrets and local environment overrides
+.env
+.env.*
+!.env.example
+*.local
+
+# Database exports (may contain credentials and personal information)
+/mwp_db/*.sql
+*.sql.gz
+*.sql.zip
+
+# User-generated media and form submissions
+/wp-content/uploads/
+
+# WordPress runtime/generated content
+/wp-content/cache/
+/wp-content/upgrade/
+/wp-content/backups/
+/wp-content/backup-db/
+/wp-content/ai1wm-backups/
+/wp-content/updraft/
+/wp-content/wflogs/
+/wp-content/wpvividbackups/
+/wp-content/litespeed/
+/wp-content/debug.log
+/wp-content/advanced-cache.php
+/wp-content/object-cache.php
+/wp-content/maintenance.php
+
+# Hosting, migration, and backup artifacts
+/*.tar
+/*.tar.*
+/*.tar_bv_*
+/*.zip
+/*.gz
+/*.wpress
+/071D757F.tar_bv_*
+/phpinfo.php*
+/gd-preload-cli.php
+
+# Logs, temporary files, and process state
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*.pid
+*~
+
+# Operating-system metadata
+.DS_Store
+**/.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE/editor settings
+/.idea/
+/.vscode/
+*.code-workspace
+
+# Local AI/agent workspace metadata
+/.agents/
+/.codex/
+
+# Test and tooling output
+/.phpunit.result.cache
+/coverage/
+/.cache/
