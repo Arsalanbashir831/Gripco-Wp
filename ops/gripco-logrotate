@@ -1,0 +1,12 @@
+/var/log/nginx/gripcosaudia.access.log /var/log/nginx/gripcosaudia.error.log {
+    daily
+    rotate 14
+    missingok
+    notifempty
+    compress
+    delaycompress
+    sharedscripts
+    postrotate
+        /usr/sbin/nginx -s reopen
+    endscript
+}

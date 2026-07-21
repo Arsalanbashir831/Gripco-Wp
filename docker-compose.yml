@@ -1,7 +1,19 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   db:
-    image: mariadb:10.11
+    image: mariadb:10.11@sha256:be981e4113326ada8d6004174dd09eeaefc03094037f811182a52d4f2e737350
     restart: unless-stopped
+    init: true
+    stop_grace_period: 60s
+    mem_limit: 2g
+    cpus: 2.0
+    pids_limit: 256
+    logging: *default-logging
     environment:
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in .env}
       MARIADB_DATABASE: ${DB_NAME:-wordpress}
@@ -21,8 +33,14 @@ services:
       - backend
 
   wordpress:
-    image: wordpress:php8.2-apache
+    image: wordpress:php8.2-apache@sha256:f1aa99c7d77680beb79e36fef8ea387557c25ab28d99f8de5c979e1ebd2c0d6e
     restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    mem_limit: 1536m
+    cpus: 2.0
+    pids_limit: 256
+    logging: *default-logging
     depends_on:
       db:
         condition: service_healthy
@@ -47,6 +65,12 @@ services:
       - .:/var/www/html
     ports:
       - "127.0.0.1:8080:80"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --show-error --max-time 10 --output /dev/null --header 'Host: gripcosaudia.com' http://127.0.0.1/wp-login.php"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
     networks:
       - proxy
       - backend

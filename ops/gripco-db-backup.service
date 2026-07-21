@@ -1,0 +1,11 @@
+[Unit]
+Description=Gripco MariaDB consistent backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/gripco-db-backup
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

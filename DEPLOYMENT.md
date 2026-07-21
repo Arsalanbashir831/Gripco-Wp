@@ -30,6 +30,8 @@ MariaDB imports `mwp_db/db_dom274807.sql` as UTF-8 on the first start of a new `
 
 Do not run `docker compose down -v` on production: `-v` deletes the database volume. Back up both the database and `wp-content/uploads` before upgrades.
 
+The VPS installation includes a one-minute upstream watchdog and daily consistent database backups retained locally for 14 days in `/var/backups/gripco`. Local backups do not protect against total VPS loss: replicate `/var/backups/gripco` and `wp-content/uploads` to independent object storage or another server.
+
 ## Pre-DNS test
 
 From a workstation, replace `VPS_IP` below with the server address. `--resolve` tests the production hostname against the new server without changing public DNS:
