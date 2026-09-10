@@ -55,7 +55,7 @@ if ( $count > 0 ) {
 			<button class="sui-button sui-button-blue show-submissions" onclick="submit()"><?php esc_html_e( 'Show Submissions', 'forminator' ); ?></button>
 
 			<?php if ( $markup ) : ?>
-				<a href="/" class="sui-button sui-button-ghost wpmudev-open-modal" data-modal="exports-schedule"><i class="sui-icon-paperclip" aria-hidden="true"></i> <?php esc_html_e( 'Export', 'forminator' ); ?></a>
+				<a href="#" class="sui-button sui-button-ghost wpmudev-open-modal" data-modal="exports-schedule"><i class="sui-icon-paperclip" aria-hidden="true"></i> <?php esc_html_e( 'Export', 'forminator' ); ?></a>
 			<?php endif; ?>
 
 		</div>

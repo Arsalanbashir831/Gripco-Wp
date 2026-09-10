@@ -75,7 +75,8 @@ function forminator_get_post_data( $property, $post_id = null, $default_value = 
 
 	if ( ! $current_post_object ) {
 		// fallback on wp_ajax, `global $post` not available.
-		$wp_referer = wp_get_referer();
+		$page_url   = filter_input( INPUT_POST, 'current_url', FILTER_VALIDATE_URL );
+		$wp_referer = ! empty( $page_url ) ? $page_url : wp_get_referer();
 		if ( $wp_referer ) {
 			$post_id = url_to_postid( $wp_referer );
 			if ( $post_id ) {
@@ -190,11 +191,102 @@ function forminator_quizzes_forms() {
  * @return bool
  */
 function forminator_quiz_has_leads( $model ) {
-	if ( isset( $model->settings['hasLeads'] ) && in_array( $model->settings['hasLeads'], array( true, 'true' ), true ) ) {
+	if ( isset( $model->settings['hasLeads'] ) && in_array( $model->settings['hasLeads'], array( true, 'true', '1', 1 ), true ) ) {
 		return true;
 	}
 
 	return false;
+}
+
+/**
+ * Get quiz leads form ID
+ *
+ * @param mixed $model Quiz model.
+ *
+ * @since 1.57.0
+ *
+ * @return int Lead form ID or 0 if not found.
+ */
+function forminator_get_quiz_leads_id( $model ) {
+	if ( forminator_quiz_has_leads( $model ) && ! empty( $model->settings['leadsId'] ) ) {
+		return (int) $model->settings['leadsId'];
+	}
+
+	return 0;
+}
+
+/**
+ * Get quiz lead form model
+ *
+ * @param mixed $model Quiz model.
+ *
+ * @since 1.57.0
+ *
+ * @return Forminator_Form_Model|null Lead form model or null if not found.
+ */
+function forminator_get_quiz_lead_model( $model ) {
+	$leads_id = forminator_get_quiz_leads_id( $model );
+	if ( $leads_id ) {
+		$lead_model = Forminator_Base_Form_Model::get_model( $leads_id );
+		if ( is_object( $lead_model ) ) {
+			return $lead_model;
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Clone a form model
+ *
+ * @param Forminator_Base_Form_Model $model Model to clone.
+ * @param int                        $original_id Original module ID.
+ *
+ * @since 1.57.0
+ *
+ * @return int|WP_Error New module ID or WP_Error on failure.
+ */
+function forminator_clone_form_model( $model, $original_id = 0 ) {
+	if ( ! is_object( $model ) ) {
+		return new WP_Error( 'invalid_model', esc_html__( 'Invalid model provided.', 'forminator' ) );
+	}
+
+	// Reset id to create new record.
+	$model->id = null;
+
+	// Update title with "Copy of" prefix.
+	if ( isset( $model->settings['formName'] ) ) {
+		$model->settings['formName'] = /* translators: %s: Form name */ sprintf( esc_html__( 'Copy of %s', 'forminator' ), esc_html( $model->settings['formName'] ) );
+	}
+
+	// Save to create new record.
+	$new_id = $model->save( true );
+	if ( is_wp_error( $new_id ) ) {
+		return $new_id;
+	}
+
+	// Get module slug from model.
+	$module_slug = method_exists( $model, 'get_module_slug' ) ? $model->get_module_slug() : $model::$module_slug;
+
+	// Trigger action hook.
+	do_action( 'forminator_' . $module_slug . '_action_clone', $new_id, $model, $original_id );
+
+	// Handle submissions retention if function exists.
+	$function = 'forminator_clone_' . $module_slug . '_submissions_retention';
+	if ( function_exists( $function ) ) {
+		$function( $original_id, $new_id );
+	}
+
+	// Purge count forms cache.
+	$cache_prefix = 'forminator_' . $module_slug . '_total_entries';
+	wp_cache_delete( $cache_prefix, $cache_prefix );
+	wp_cache_delete( $cache_prefix . '_publish', $cache_prefix . '_publish' );
+	wp_cache_delete( $cache_prefix . '_draft', $cache_prefix . '_draft' );
+
+	// Call module update action.
+	Forminator_Base_Form_Model::module_update_do_action( $module_slug, $new_id, $model );
+
+	return $new_id;
 }
 
 /**
@@ -400,10 +492,11 @@ function forminator_data_to_model_quiz( $data ) {
  * @param bool|false $as_array Prepare css as array.
  * @param bool|true  $separate_prefix Separate prefix.
  * @param string     $wildcard string.
+ * @param array      $detached_selectors Selectors rendered outside the module and their scope classes.
  *
  * @return array|string
  */
-function forminator_prepare_css( $css_string, $prefix, $as_array = false, $separate_prefix = true, $wildcard = '' ) {
+function forminator_prepare_css( $css_string, $prefix, $as_array = false, $separate_prefix = true, $wildcard = '', $detached_selectors = array() ) {
 	$css_array = array(); // master array to hold all values.
 	$elements  = explode( '}', $css_string );
 	// Output is the final processed CSS string.
@@ -451,7 +544,27 @@ function forminator_prepare_css( $css_string, $prefix, $as_array = false, $separ
 		$a_styles[0]         = str_replace( $remove_element_name . '{', '', $a_styles[0] );
 		$names               = explode( ',', $name );
 		foreach ( $names as $name ) {
-			$name = trim( $name );
+			$name                    = trim( $name );
+			$detached_selector_found = false;
+			foreach ( $detached_selectors as $detached_selector => $detached_prefix ) {
+				$detached_selector_pattern = '/'
+					. preg_quote( $detached_selector, '/' )
+					. '(?![A-Za-z0-9_-])/';
+				if ( preg_match( $detached_selector_pattern, $name ) ) {
+					$name                    = preg_replace(
+						$detached_selector_pattern,
+						$detached_selector . $detached_prefix,
+						$name,
+						1
+					);
+					$detached_selector_found = true;
+					break;
+				}
+			}
+			if ( $detached_selector_found ) {
+				$prepared .= $name . ',';
+				continue;
+			}
 			if ( 0 === strpos( $name, ':' ) ) {
 				$space_needed = false;
 			} elseif ( $separate_prefix && empty( $wildcard ) ) {
@@ -588,7 +701,7 @@ function forminator_list_pagination( $total, $type = 'listings', $is_ajax = fals
 		}
 
 		?>
-		<ul class="sui-pagination  
+		<ul class="sui-pagination
 		<?php
 		if ( $is_ajax ) {
 			echo 'forminator-ajax-pagination'; }
@@ -1122,4 +1235,100 @@ function forminator_get_schedule_time( $schedule ) {
  */
 function forminator_replace_linebreaks( $value ) {
 	return wpautop( $value );
+}
+
+/**
+ * Balance table tag
+ *
+ * @since 1.55
+ *
+ * @param string $content Content.
+ * @return string
+ */
+function forminator_balance_table_tag( $content ) {
+	// Add table tag if content has table element to avoid mess up table structure.
+	if ( ! empty( $content ) && preg_match( '/<(tbody|thead|tfoot|tr|td|th)[\s>]/i', $content ) ) {
+		$content = '<table>' . $content . '</table>';
+		$content = force_balance_tags( $content );
+	}
+
+	return $content;
+}
+
+/**
+ * Format HTML for display
+ *
+ * @since 1.55
+ *
+ * @param string $content Content.
+ * @return string
+ */
+function forminator_format_html( $content ) {
+	$content = forminator_replace_linebreaks( $content );
+	$content = forminator_balance_table_tag( $content );
+	return forminator_sanitize_rich_textarea_widget_hooks( $content );
+}
+
+/**
+ * Sanitize rich-text textarea content and block admin UI widget hooks.
+ *
+ * @since 1.57.1
+ *
+ * @param string $content Content.
+ * @return string
+ */
+function forminator_sanitize_rich_textarea_widget_hooks( $content ) {
+	if ( ! is_string( $content ) || '' === $content ) {
+		return $content;
+	}
+
+	return wp_kses( $content, forminator_get_rich_textarea_allowed_html() );
+}
+
+/**
+ * Get allowed HTML for public rich-text content rendered in admin screens.
+ *
+ * @since 1.57.1
+ *
+ * @return array
+ */
+function forminator_get_rich_textarea_allowed_html() {
+	$allowed_html = wp_kses_allowed_html( 'post' );
+
+	foreach ( $allowed_html as $tag => $attributes ) {
+		if ( ! is_array( $attributes ) ) {
+			continue;
+		}
+
+		// Public submissions should not carry admin widget state into Entries.
+		unset( $allowed_html[ $tag ]['data-*'] );
+
+		if ( isset( $allowed_html[ $tag ]['class'] ) ) {
+			$allowed_html[ $tag ]['class'] = array(
+				'value_callback' => 'forminator_is_allowed_rich_textarea_class_attribute',
+			);
+		}
+	}
+
+	return $allowed_html;
+}
+
+/**
+ * Check whether a class attribute is safe for public rich-text admin output.
+ *
+ * @since 1.57.1
+ *
+ * @param string $class_value Class attribute value.
+ * @return bool
+ */
+function forminator_is_allowed_rich_textarea_class_attribute( $class_value ) {
+	$classes = preg_split( '/\s+/', $class_value, -1, PREG_SPLIT_NO_EMPTY );
+
+	foreach ( $classes as $class_name ) {
+		if ( preg_match( '/^(sui|fui)-/i', $class_name ) ) {
+			return false;
+		}
+	}
+
+	return true;
 }

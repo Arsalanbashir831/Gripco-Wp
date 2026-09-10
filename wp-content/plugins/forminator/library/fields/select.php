@@ -144,13 +144,17 @@ class Forminator_Select extends Forminator_Field {
 
 		$settings    = $views_obj->model->settings;
 		$this->field = $field;
+		$form_id     = $settings['form_id'];
+
+		if ( isset( $views_obj->lead_model->id ) ) {
+			$form_id = $views_obj->lead_model->id;
+		}
 
 		$i             = 1;
 		$html          = '';
 		$id            = self::get_property( 'element_id', $field );
 		$name          = $id;
 		$uniq_id       = Forminator_CForm_Front::$uid;
-		$form_id       = $settings['form_id'];
 		$id            = 'forminator-form-' . $form_id . '__field--' . $id . '_' . $uniq_id;
 		$required      = self::get_property( 'required', $field, false, 'bool' );
 		$options       = self::get_options( $field );
@@ -275,15 +279,15 @@ class Forminator_Select extends Forminator_Field {
 
 				$label_id = $input_id . '-label';
 
-				$html .= sprintf( '<label id="' . $label_id . '" for="%s" class="' . $class . '">', $input_id );
+				$html .= sprintf( '<label id="' . esc_attr( $label_id ) . '" for="%s" class="' . esc_attr( $class ) . '">', esc_attr( $input_id ) );
 
 				$html .= sprintf(
 					'<input type="checkbox" name="%s" value="%s" id="%s" aria-labelledby="%s" data-calculation="%s" %s %s />',
-					$name,
+					esc_attr( $name ),
 					$value,
-					$input_id,
-					$label_id,
-					$calculation_value,
+					esc_attr( $input_id ),
+					esc_attr( $label_id ),
+					esc_attr( $calculation_value ),
 					$hidden_calc_behavior,
 					$selected
 				);
@@ -301,7 +305,7 @@ class Forminator_Select extends Forminator_Field {
 
 			$html .= sprintf(
 				"<input type='hidden' name='%s' class='%s' value='%s' />",
-				$field_name . '-multiselect-default-values',
+				esc_attr( $field_name . '-multiselect-default-values' ),
 				'multiselect-default-values',
 				$default
 			);
@@ -449,17 +453,17 @@ class Forminator_Select extends Forminator_Field {
 			$html .= sprintf(
 				'<select %s id="%s" class="%s" data-required="%s" name="%s" data-default-value="%s"%s data-placeholder="%s" data-search="%s" data-search-placeholder="%s" data-checkbox="%s" data-allow-clear="%s" aria-labelledby="%s"%s>',
 				$select_type,
-				$id,
+				esc_attr( $id ),
 				'forminator-select--field forminator-select2 forminator-select2-multiple', // class.
-				$required,
-				$name,
+				esc_attr( $required ),
+				esc_attr( $name ),
 				esc_attr( $default ),
 				$hidden_calc_behavior,
 				esc_attr( wp_strip_all_tags( html_entity_decode( $placeholder ) ) ),
-				$search,
-				$search_placeholder,
-				$has_checkbox,
-				$allow_clear,
+				esc_attr( $search ),
+				esc_attr( $search_placeholder ),
+				esc_attr( $has_checkbox ),
+				esc_attr( $allow_clear ),
 				esc_attr( $id . '-label' ),
 				( ! empty( $description ) ? ' aria-describedby="' . esc_attr( $id . '-description' ) . '"' : '' )
 			);
@@ -585,12 +589,18 @@ class Forminator_Select extends Forminator_Field {
 		$field_type = self::get_property( 'value_type', $field );
 		$form_id    = Forminator_CForm_Front_Action::$module_id;
 
-		// Decode HTML entities from submitted values to match against raw option values.
-		$selected_options = array_map( 'htmlspecialchars_decode', $selected_options );
+		// Normalize submitted values the same way as stored option values.
+		$selected_options = array_map( 'forminator_normalize_choice_option_value', $selected_options );
+
+		if ( isset( Forminator_CForm_Front_Action::$prepared_data['lead_quiz'] ) ) {
+			$form_id = Forminator_CForm_Front_Action::$prepared_data['lead_quiz'];
+		}
 
 		foreach ( $field['options'] as $option ) {
-			// Ski if this option was not selected.
-			if ( ! in_array( $option['value'], $selected_options, true ) ) {
+			// Match the value submitted by the browser after tags are stripped during rendering.
+			$option_value = forminator_normalize_choice_option_value( $option['value'] );
+			// Skip if this option was not selected.
+			if ( ! in_array( $option_value, $selected_options, true ) ) {
 				continue;
 			}
 			if ( Forminator_Form_Entry_Model::is_option_limit_reached( $form_id, $field_name, $field_type, $option, true ) ) {
@@ -614,14 +624,22 @@ class Forminator_Select extends Forminator_Field {
 		$id           = self::get_property( 'element_id', $field );
 		$value_exists = true;
 
+		// Get option values as submitted by the browser after tags are stripped during rendering.
+		$option_values = array_map(
+			function ( $option ) {
+				return forminator_normalize_choice_option_value( $option['value'] );
+			},
+			$field['options']
+		);
+
 		if ( is_array( $data ) ) {
 			foreach ( $data as $value ) {
-				if ( false === array_search( strval( htmlspecialchars_decode( $value ) ), array_map( 'strval', array_column( $field['options'], 'value' ) ), true ) ) {
+				if ( false === array_search( forminator_normalize_choice_option_value( $value ), $option_values, true ) ) {
 					$value_exists = false;
 					break;
 				}
 			}
-		} elseif ( ! empty( $data ) && false === array_search( strval( htmlspecialchars_decode( $data ) ), array_map( 'strval', array_column( $field['options'], 'value' ) ), true ) ) {
+		} elseif ( ! empty( $data ) && false === array_search( forminator_normalize_choice_option_value( $data ), $option_values, true ) ) {
 			$value_exists = false;
 		}
 
@@ -709,14 +727,7 @@ class Forminator_Select extends Forminator_Field {
 	public function sanitize( $field, $data ) {
 		$original_data = $data;
 
-		// Sanitize.
-		if ( is_array( $data ) ) {
-			foreach ( $data as $key => $val ) {
-				$data[ $key ] = trim( wp_kses_post( $val ) );
-			}
-		} else {
-			$data = trim( wp_kses_post( $data ) );
-		}
+		$data = $this->sanitize_choice_data( $data );
 
 		return apply_filters( 'forminator_field_single_sanitize', $data, $field, $original_data );
 	}

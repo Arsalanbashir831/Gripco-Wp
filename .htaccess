@@ -1,9 +1,32 @@
 # BEGIN WordPress
+
+# Block direct web access to bootstrap/configuration endpoints that are only
+# intended to be included by WordPress itself.
+<FilesMatch "^(?:wp-config\.php|wp-load\.php|wp-settings\.php|readme\.html|license\.txt)$">
+Require all denied
+</FilesMatch>
+
+# XML-RPC is not used by this site and is a frequent brute-force target.
+<Files "xmlrpc.php">
+Require all denied
+</Files>
+
 <IfModule mod_rewrite.c>
 RewriteEngine On
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 RewriteBase /
 RewriteRule ^index\.php$ - [L]
+
+# The original Site Icon attachment record was lost, but its optimized image
+# remains available. Support browsers and crawlers that request /favicon.ico.
+RewriteRule ^favicon\.ico$ /wp-content/uploads/2024/04/Geotech.png [L]
+
+# Some originals were removed while Airlift's optimized copies remained.
+# Serve the matching optimized image instead of sending the request to WordPress.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{DOCUMENT_ROOT}/wp-content/uploads/al_opt_content/IMAGE/gripcosaudia.com/wp-content/uploads/$1.bv.webp -f
+RewriteRule ^wp-content/uploads/(.+\.(?:avif|gif|jpe?g|png|webp))$ /wp-content/uploads/al_opt_content/IMAGE/gripcosaudia.com/wp-content/uploads/$1.bv.webp [L,NC]
+
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule . /index.php [L]

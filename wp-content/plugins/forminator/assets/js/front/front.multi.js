@@ -432,6 +432,9 @@
 				if ( self.settings.text_prev ) {
 					args.prev_button = self.settings.text_prev;
 				}
+				if ( self.settings.text_view_results ) {
+					args.view_results_text = self.settings.text_view_results;
+				}
 				if ( self.settings.submit_class ) {
 					args.submitButtonClass = self.settings.submit_class;
 				}
@@ -484,7 +487,7 @@
 						'facebook': 'https://www.facebook.com/sharer/sharer.php?u=' + url + '&quote=' + message,
 						'twitter': 'https://twitter.com/intent/tweet?&url=' + url + '&text=' + message,
 						'google': 'https://plus.google.com/share?url=' + url,
-						'linkedin': 'https://www.linkedin.com/shareArticle?mini=true&url=' + url + '&title=' + message
+						'linkedin': 'https://www.linkedin.com/feed/?shareActive=true&text=' + message
 					};
 
 				if (social_shares[social] !== undefined) {
@@ -590,7 +593,8 @@
 						initialCountry: 'undefined' !== typeof ( country ) ? country : 'us',
 						validationNumberTypes: null,
 						loadUtils: () => import(window.ForminatorFront.cform.intlTelInput_utils_script),
-						strictMode: true,
+						// Benin moved to 10-digit numbers, but the bundled utils still limit input to the old length.
+						strictMode: ! ( 'international' === validation && 'undefined' !== typeof ( country ) && 'bj' === country.toLowerCase() ),
 					};
 
 					if ( 'undefined' !== typeof ( validation ) && 'standard' === validation ) {
@@ -612,6 +616,32 @@
 					}
 
 					var iti = window.intlTelInput(self, args);
+
+					// Prevent auto-switching to a country with the same dial code.
+					var dropdownSelected   = false,
+						configuredCountry  = iti.getSelectedCountryData().iso2,
+						configuredDialCode = iti.getSelectedCountryData().dialCode;
+
+					// Remove previous handlers to avoid duplicates
+					$( self ).off('close:countrydropdown countrychange');
+
+					$( self ).on( 'close:countrydropdown', function () {
+						dropdownSelected = true;
+						setTimeout( function () { dropdownSelected = false; }, 0 ); // Clear flag after countrychange fires.
+					} );
+
+					$( self ).on( 'countrychange', function () {
+						if ( dropdownSelected ) {
+							dropdownSelected   = false;
+							configuredCountry  = iti.getSelectedCountryData().iso2;
+							configuredDialCode = iti.getSelectedCountryData().dialCode;
+							return;
+						}
+						var newCountry = iti.getSelectedCountryData();
+						if ( newCountry.dialCode === configuredDialCode && newCountry.iso2 !== configuredCountry ) {
+							iti.setCountry( configuredCountry );
+						}
+					} );
 
 					if ( 'undefined' !== typeof ( validation ) && 'standard' === validation ) {
 						// Reset country to default if changed and invalid previously.
@@ -1241,6 +1271,12 @@
 		init_login_2FA: function () {
 			var self = this;
 			this.two_factor_providers( 'totp' );
+			$('body').on('keydown', '#forminator-2fa-webauthn .option-row', function ( event ) {
+				if ( 'Enter' === event.key || ' ' === event.key || 'Spacebar' === event.key ) {
+					event.preventDefault();
+					$( this ).triggerHandler( 'click' );
+				}
+			});
 			$('body').on('click', '.forminator-2fa-link', function () {
 				self.$el.find('#login_error').remove();
 				self.$el.find('.notification').empty();
@@ -1259,6 +1295,7 @@
 			self.$el.find('.forminator-authentication-box').hide();
 			self.$el.find('.forminator-authentication-box input').attr( 'disabled', true );
 			self.$el.find( '#forminator-2fa-' + slug ).show();
+			self.$el.find( '#forminator-2fa-' + slug + ' .option-row' ).attr( 'tabindex', '0' ).attr( 'role', 'button' );
 			self.$el.find( '#forminator-2fa-' + slug + ' input' ).attr( 'disabled', false );
 			if ( self.$el.find('.forminator-2fa-link').length > 0 ) {
 				self.$el.find('.forminator-2fa-link').hide();
@@ -1596,6 +1633,9 @@
 						has_loader: form.settings.has_loader,
 						loader_label: form.settings.loader_label,
 						stripe_depends: form.settings.stripe_depends,
+						stripe_checkout_metadata_depends: form.settings.stripe_checkout_metadata_depends || [],
+						is_preview: form.settings.is_preview,
+						preview_data: form.settings.preview_data,
 					};
 
 					if ( stripe_payment.data('is-ocs') ) {
@@ -1755,6 +1795,19 @@
 				$field.find( '#' + editor_id ).trigger( 'change' );
 			}, 100 ); // Small timeout to ensure editor is ready when switching
 		} );
+
+		// Bind the click event to the editor tab when Hustle popups are displayed.
+		$( document ).on( "hustle:module:displayed", function (e, data) {
+			$( e.target ).find( '.wp-switch-editor' ).on( 'click', function () {
+				if( typeof switchEditors !== 'undefined' && typeof switchEditors.go === 'function' ) {
+					if ( $( this ).hasClass( 'switch-tmce' ) ) {
+						switchEditors.go( editor_id, 'tmce' );
+					} else {
+						switchEditors.go( editor_id, 'html' );
+					}
+				}
+			} );
+		});
 
 		// trigger editor change to save value to textarea,
 		// default wp tinymce textarea update only triggered when submit
@@ -2127,4 +2180,55 @@ var forminatorDateUtil = {
 
 	    return d2.getFullYear()-d1.getFullYear();
 	},
+};
+
+const forminator_init_wp_editor = function ( id, args, force = false ) {
+	const editor = typeof tinymce !== "undefined" ? tinymce.get( id ) : null;
+	const links = jQuery( '#wp-' + id + '-wrap link' );
+	let clonedLinks;
+	if ( links.length ) {
+		// Clone the link elements to add them after re-initialization.
+		clonedLinks = jQuery( '#wp-' + id + '-wrap link' ).clone();
+	}
+
+	if ( editor || force ) {
+		// Remove the existing editor instance before reinitializing to avoid conflicts.
+		wp.editor.remove( id );
+		const textarea = document.getElementById( id );
+		if( textarea ) {
+			// Ensure the textarea is visible before reinitialization to prevent TinyMCE from hiding it.
+			document.getElementById( id ).style.visibility = 'visible';
+		}
+	}
+	// Ensure the editor is not initialized to prevent duplicate initialization.
+	if ( jQuery( '#wp-' + id + '-wrap' ).length === 0 ) {
+		wp.editor.initialize( id, args );
+		if ( links.length ) {
+			// Append the cloned link elements back to the editor wrapper after initialization to ensure the necessary styles are applied.
+			jQuery( '#wp-' + id + '-wrap' ).append( clonedLinks );
+		}
+	}
+};
+
+const forminator_init_wp_editor_on_visible = function ( id, args, force = false ) {
+	const textarea = document.getElementById( id );
+	if ( ! textarea ) {
+		return;
+	}
+	const observer = new IntersectionObserver(
+		( entries, observerInstance ) => {
+			entries.forEach( ( entry ) => {
+				// Check if the element is visible on the DOM.
+				if ( entry.isIntersecting ) {
+					// Initialize WP Editor when the textarea becomes visible.
+					forminator_init_wp_editor( id, args, force );
+					// Stop observing after initialization to prevent unnecessary calls.
+					observerInstance.unobserve( entry.target );
+				}
+			} );
+		}
+	);
+
+	// Start watching the textarea.
+	observer.observe( textarea );
 };

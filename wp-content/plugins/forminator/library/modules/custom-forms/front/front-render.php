@@ -354,6 +354,7 @@ class Forminator_CForm_Front extends Forminator_Render_Form {
 		$wrapper .= '<div class="forminator-authentication">';
 
 		$wrapper .= '<div role="dialog" id="' . esc_attr( $module_id ) . '" class="forminator-authentication-content" aria-modal="true" aria-labelledby="' . esc_attr( $title_id ) . '">';
+		$wrapper .= '<div id="login">';
 
 		$wrapper .= '<h1 id="' . esc_attr( $title_id ) . '"><a href="' . esc_url( $login_header_url ) . '" title="' . esc_attr( $login_header_title ) . '" style="background-image: url(' . esc_url( $custom_graphic ) . ');">' . esc_html__( 'Authenticate to login', 'forminator' ) . '</a></h1>';
 
@@ -366,7 +367,12 @@ class Forminator_CForm_Front extends Forminator_Render_Form {
 
 			$provider->authentication_form();
 
-			$wrapper .= ob_get_clean();
+			$provider_markup = ob_get_clean();
+			if ( 'webauthn' === $slug ) {
+				$provider_markup = '<div class="wpdef-2fa-form" id="wpdef-2fa-form-' . esc_attr( $slug ) . '">' . $provider_markup . '</div>';
+			}
+
+			$wrapper .= $provider_markup;
 
 			$wrapper .= '</div>';
 		}
@@ -391,6 +397,7 @@ class Forminator_CForm_Front extends Forminator_Render_Form {
 			$wrapper     .= '<p class="forminator-authentication-backtolog"><a class="auth-back" href="#">' . esc_html( $link_back_to ) . '</a></p>';
 		}
 
+		$wrapper .= '</div>';
 		$wrapper .= '</div>';
 
 		$wrapper .= '</div>';
@@ -425,6 +432,89 @@ class Forminator_CForm_Front extends Forminator_Render_Form {
 		$assets = new Forminator_Assets_Enqueue_Form( $this->model, $is_ajax_load );
 		$assets->enqueue_styles( $this );
 		$assets->enqueue_scripts( $this );
+
+		$form_type     = isset( $this->model->settings['form-type'] ) ? $this->model->settings['form-type'] : '';
+		$defender_data = forminator_defender_compatibility();
+		if (
+			'login' === $form_type
+			&& $defender_data['is_activated']
+			&& function_exists( 'defender_asset_url' )
+			&& function_exists( 'wd_di' )
+			&& defined( 'WP_DEFENDER_FILE' )
+			&& defined( 'DEFENDER_VERSION' )
+			&& class_exists( '\WP_Defender\Controller\Webauthn' )
+		) {
+			$providers = $this->get_2FA_poviders();
+			if ( isset( $providers['webauthn'] ) ) {
+				$biometric_style = defender_asset_url( '/assets/css/biometric.css' );
+				$common_script   = plugins_url( 'assets/js/webauthn-common.js', WP_DEFENDER_FILE );
+				$login_script    = plugins_url( 'assets/js/biometric-login.js', WP_DEFENDER_FILE );
+				$inline_style    = '.forminator-authentication #login #wpdef-2fa-form-webauthn .welcome-screen .option-row{box-sizing:border-box;width:calc(100% + 48px);max-width:none;margin-right:-24px}';
+				$webauthn_config = array(
+					'admin_url'     => admin_url( 'admin-ajax.php' ),
+					'nonce'         => wp_create_nonce( 'wpdef_webauthn' ),
+					'i18n'          => wd_di()->get( \WP_Defender\Controller\Webauthn::class )->get_translations(),
+					'username'      => '',
+					'provider_slug' => 'webauthn',
+				);
+
+				if ( ! $is_ajax_load ) {
+					wp_enqueue_style(
+						'defender-biometric-login-screen',
+						$biometric_style,
+						array(),
+						DEFENDER_VERSION
+					);
+					wp_add_inline_style(
+						'defender-biometric-login-screen',
+						$inline_style
+					);
+
+					wp_enqueue_script(
+						'wpdef_webauthn_common_script',
+						$common_script,
+						array(),
+						DEFENDER_VERSION,
+						true
+					);
+
+					wp_enqueue_script(
+						'defender-biometric-login-script',
+						$login_script,
+						array(
+							'jquery',
+							'wpdef_webauthn_common_script',
+						),
+						DEFENDER_VERSION,
+						true
+					);
+
+					wp_localize_script(
+						'defender-biometric-login-script',
+						'webauthn',
+						$webauthn_config
+					);
+				} else {
+					$this->styles['defender-biometric-login-screen']  = array(
+						'src' => add_query_arg( 'ver', DEFENDER_VERSION, $biometric_style ),
+					);
+					$this->scripts['wpdef_webauthn_common_script']    = array(
+						'src'   => add_query_arg( 'ver', DEFENDER_VERSION, $common_script ),
+						'on'    => 'window',
+						'load'  => 'wpdefBase64Url2Base64',
+						'async' => false,
+					);
+					$this->scripts['defender-biometric-login-script'] = array(
+						'src'   => add_query_arg( 'ver', DEFENDER_VERSION, $login_script ),
+						'on'    => 'window',
+						'load'  => 'wpdefBiometricLogin',
+						'async' => false,
+					);
+					$this->script                                    .= '<style type="text/css">' . $inline_style . '</style>';
+					$this->script                                    .= '<script type="text/javascript">var webauthn = ' . wp_json_encode( $webauthn_config ) . ';</script>';
+				}
+			}
+		}
 
 		// Load reCaptcha scripts.
 		if ( $this->has_captcha() ) {
@@ -478,7 +568,9 @@ class Forminator_CForm_Front extends Forminator_Render_Form {
 
 		// Load Stripe scripts.
 		if ( $this->has_stripe() ) {
-			$src = 'https://js.stripe.com/v3/';
+			$src = ( $this->uses_checkout_session_stripe() || $is_preview )
+				? 'https://js.stripe.com/dahlia/stripe.js'
+				: 'https://js.stripe.com/v3/';
 
 			if ( ! $is_ajax_load ) {
 				wp_enqueue_script(
@@ -603,6 +695,13 @@ class Forminator_CForm_Front extends Forminator_Render_Form {
 					&& current_user_can( 'upload_files' ) ) {
 				wp_enqueue_media();
 			}
+
+			// Ensure TinyMCE toolbar and WP link dialog appear above
+			// modal/popup overlays by setting a high z-index.
+			wp_add_inline_style(
+				'buttons',
+				'div.mce-inline-toolbar-grp, #wp-link-wrap { z-index: 999991 !important; }'
+			);
 		}
 
 		// Load selected google font.
@@ -3075,13 +3174,26 @@ class Forminator_CForm_Front extends Forminator_Render_Form {
 		}
 
 		if ( $has_stripe ) {
-			$stripe_settings = $this->get_stripe_settings();
-			if ( ! empty( $stripe_settings['automatic_payment_methods'] ) && 'false' !== $stripe_settings['automatic_payment_methods'] ) {
-				$stripe_field              = Forminator_Core::get_field_object( 'stripe' );
+			$stripe_settings     = $this->get_stripe_settings();
+			$stripe_field        = Forminator_Core::get_field_object( 'stripe' );
+			$is_stripe_field     = $stripe_field instanceof Forminator_Stripe;
+			$is_checkout_session = $is_stripe_field && $stripe_field->is_checkout_session( $stripe_settings );
+			$card_only           = empty( $stripe_settings['automatic_payment_methods'] )
+				|| 'false' === $stripe_settings['automatic_payment_methods'];
+
+			if ( ! $is_checkout_session && $card_only ) {
+				$options['stripe_depends'] = array();
+			} elseif ( $is_stripe_field ) {
 				$options['stripe_depends'] = $stripe_field->get_amount_dependent_fields_all( $stripe_settings );
 			} else {
 				$options['stripe_depends'] = array();
 			}
+
+			$options['stripe_checkout_metadata_depends'] = $is_stripe_field
+				? $stripe_field->get_merge_tag_dependent_fields(
+					Forminator_Field::get_property( 'options', $stripe_settings, array() )
+				)
+				: array();
 		}
 
 		return $options;
@@ -3158,7 +3270,7 @@ class Forminator_CForm_Front extends Forminator_Render_Form {
 	 * @param array  $data Data.
 	 * @return object
 	 */
-	protected function set_form_model_data( $form_model, $data ) {
+	public function set_form_model_data( $form_model, $data ) {
 		$fields = array();
 		$title  = '';
 
@@ -3324,9 +3436,39 @@ class Forminator_CForm_Front extends Forminator_Render_Form {
 		if ( ! empty( $fields ) ) {
 			foreach ( $fields as $field ) {
 				if ( 'stripe' === $field['type'] || 'stripe-ocs' === $field['type'] ) {
-					$stripe = new Forminator_Gateway_Stripe();
-					return $stripe->is_ready();
+					$field_object = Forminator_Core::get_field_object( $field['type'] );
+					if ( $field_object && $field_object->is_available( $field ) ) {
+						return true;
+					}
 				}
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Check if the form uses the Checkout Sessions API for Stripe.
+	 *
+	 * @since 1.56
+	 *
+	 * @return bool
+	 */
+	public function uses_checkout_session_stripe() {
+		$fields = $this->get_fields();
+
+		if ( empty( $fields ) ) {
+			return false;
+		}
+
+		$stripe_field = Forminator_Core::get_field_object( 'stripe' );
+		if ( ! $stripe_field instanceof Forminator_Stripe ) {
+			return false;
+		}
+
+		foreach ( $fields as $field ) {
+			if ( $stripe_field->is_checkout_session( $field ) ) {
+				return true;
 			}
 		}
 
@@ -3340,9 +3482,8 @@ class Forminator_CForm_Front extends Forminator_Render_Form {
 	 */
 	public function get_stripe_settings() {
 		$fields = $this->get_fields();
-		$stripe = new Forminator_Gateway_Stripe();
 
-		if ( empty( $fields ) || ! $stripe->is_ready() ) {
+		if ( empty( $fields ) ) {
 			return false;
 		}
 		// Filter elements where type is 'stripe-ocs'.
@@ -3364,7 +3505,12 @@ class Forminator_CForm_Front extends Forminator_Render_Form {
 		}
 
 		if ( ! empty( $stripe_fields ) ) {
-			return array_shift( $stripe_fields );
+			foreach ( $stripe_fields as $stripe_field ) {
+				$field_object = Forminator_Core::get_field_object( $stripe_field['type'] );
+				if ( $field_object && $field_object->is_available( $stripe_field ) ) {
+					return $stripe_field;
+				}
+			}
 		}
 
 		return false;

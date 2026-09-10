@@ -127,7 +127,7 @@ class Forminator_Hidden extends Forminator_Field {
 			$class_attr = sprintf( ' class="%s"', esc_attr( $custom_class ) );
 		}
 
-		return sprintf( '<input type="hidden" id="%s"%s name="%s" value="%s" />', $id . '_' . Forminator_CForm_Front::$uid, $class_attr, $name, $value );
+		return sprintf( '<input type="hidden" id="%s"%s name="%s" value="%s" />', esc_attr( $id . '_' . Forminator_CForm_Front::$uid ), $class_attr, esc_attr( $name ), $value );
 	}
 
 	/**

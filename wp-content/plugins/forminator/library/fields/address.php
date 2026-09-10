@@ -254,7 +254,7 @@ class Forminator_Address extends Forminator_Field {
 
 			$html .= '<div class="forminator-row">';
 
-				$html .= sprintf( '<div id="%s" class="forminator-col">', $address['name'] );
+				$html .= sprintf( '<div id="%s" class="forminator-col">', esc_attr( $address['name'] ) );
 
 					$html .= '<div class="forminator-field">';
 
@@ -319,7 +319,7 @@ class Forminator_Address extends Forminator_Field {
 
 		if ( $city || $state ) {
 
-			$html .= sprintf( '<div class="forminator-row" data-multiple="%s">', $multirow );
+			$html .= sprintf( '<div class="forminator-row" data-multiple="%s">', esc_attr( $multirow ) );
 
 			if ( $city ) {
 				$browser_autofill = self::get_property( 'address_city_browser_autofill', $field, 'enabled' );
@@ -348,7 +348,7 @@ class Forminator_Address extends Forminator_Field {
 					$city_data = array_merge( $city_data, $autofill_markup );
 				}
 
-				$html .= sprintf( '<div id="%s" class="forminator-col forminator-col-%s">', $city_data['name'], $cols );
+				$html .= sprintf( '<div id="%s" class="forminator-col forminator-col-%s">', esc_attr( $city_data['name'] ), esc_attr( $cols ) );
 
 					$html .= '<div class="forminator-field">';
 
@@ -393,7 +393,7 @@ class Forminator_Address extends Forminator_Field {
 					$state_data = array_merge( $state_data, $autofill_markup );
 				}
 
-				$html .= sprintf( '<div id="%s" class="forminator-col forminator-col-%s">', $state_data['name'], $cols );
+				$html .= sprintf( '<div id="%s" class="forminator-col forminator-col-%s">', esc_attr( $state_data['name'] ), esc_attr( $cols ) );
 
 					$html .= '<div class="forminator-field">';
 
@@ -459,7 +459,7 @@ class Forminator_Address extends Forminator_Field {
 
 		if ( $address_zip || $address_country ) {
 
-			$html .= sprintf( '<div class="forminator-row" data-multiple="%s">', $multirow );
+			$html .= sprintf( '<div class="forminator-row" data-multiple="%s">', esc_attr( $multirow ) );
 
 			if ( $address_zip ) {
 				$browser_autofill = self::get_property( 'address_zip_browser_autofill', $field, 'enabled' );
@@ -486,7 +486,7 @@ class Forminator_Address extends Forminator_Field {
 					$zip_data = array_merge( $zip_data, $autofill_markup );
 				}
 
-				$html .= sprintf( '<div id="%s" class="forminator-col forminator-col-%s">', $zip_data['name'], $cols );
+				$html .= sprintf( '<div id="%s" class="forminator-col forminator-col-%s">', esc_attr( $zip_data['name'] ), esc_attr( $cols ) );
 
 					$html .= '<div class="forminator-field">';
 
@@ -577,21 +577,23 @@ class Forminator_Address extends Forminator_Field {
 				 */
 				$countries = apply_filters( 'forminator_countries_field', $new_countries );
 
-				$html .= sprintf( '<div id="%s" class="forminator-col forminator-col-%s">', $country_data['name'], $cols );
+				$html .= sprintf( '<div id="%s" class="forminator-col forminator-col-%s">', esc_attr( $country_data['name'] ), esc_attr( $cols ) );
 
 					$html .= '<div class="forminator-field">';
 
-						$default_country = self::get_property( 'address_country_placeholder', $field );
+					$country_select_value = $country
+						? $country
+						: self::get_property( 'address_country_placeholder', $field );
 
-						$html .= self::create_country_select(
-							$country_data,
-							self::get_property( 'address_country_label', $field ),
-							$countries,
-							$default_country,
-							$country_desc,
-							$country_required,
-							$descr_position,
-						);
+					$html .= self::create_country_select(
+						$country_data,
+						self::get_property( 'address_country_label', $field ),
+						$countries,
+						$country_select_value,
+						$country_desc,
+						$country_required,
+						$descr_position,
+					);
 
 					$html .= '</div>';
 
@@ -659,9 +661,9 @@ class Forminator_Address extends Forminator_Field {
 			}
 
 			if ( 'Select country' === $option['label'] ) {
-				$html .= sprintf( '<option value="" data-country-code="%s" %s>%s</option>', $option['value'], $selected, $option['label'] );
+				$html .= sprintf( '<option value="" data-country-code="%s" %s>%s</option>', esc_attr( $option['value'] ), $selected, esc_html( $option['label'] ) );
 			} else {
-				$html .= sprintf( '<option value="%s" data-country-code="%s" %s>%s</option>', $option['label'], $option['value'], $selected, $option['label'] );
+				$html .= sprintf( '<option value="%s" data-country-code="%s" %s>%s</option>', esc_attr( $option['label'] ), esc_attr( $option['value'] ), $selected, esc_html( $option['label'] ) );
 			}
 		}
 

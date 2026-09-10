@@ -191,7 +191,7 @@ abstract class Forminator_Mail {
 	public function is_send_admin_mail( $setting ) {
 		if ( isset( $setting['use-admin-email'] ) && ! empty( $setting['use-admin-email'] ) ) {
 			if ( filter_var( $setting['use-admin-email'], FILTER_VALIDATE_BOOLEAN ) ) {
-				if ( isset( $setting['admin-email-title'] ) && isset( $setting['admin-email-editor'] ) ) {
+				if ( ! empty( $setting['admin-email-title'] ) && ! empty( $setting['admin-email-editor'] ) ) {
 					return true;
 				}
 			}
@@ -365,12 +365,9 @@ abstract class Forminator_Mail {
 	 */
 	private function filter_attachments( $attachments ) {
 		if ( ! empty( $attachments ) ) {
-			$upload_dir = wp_upload_dir();
-			if ( ! empty( $upload_dir['basedir'] ) ) {
-				foreach ( $attachments as $key => $attachment ) {
-					if ( 0 !== strpos( $attachment, $upload_dir['basedir'] ) ) {
-						unset( $attachments[ $key ] );
-					}
+			foreach ( $attachments as $key => $attachment ) {
+				if ( ! forminator_attachment_path_is_allowed( $attachment ) ) {
+					unset( $attachments[ $key ] );
 				}
 			}
 		}

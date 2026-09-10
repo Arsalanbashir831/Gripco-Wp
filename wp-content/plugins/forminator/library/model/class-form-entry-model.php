@@ -66,6 +66,20 @@ class Forminator_Form_Entry_Model {
 	public $is_spam = false;
 
 	/**
+	 * Custom sequence numeric ID
+	 *
+	 * @var int
+	 */
+	public $custom_id = 0;
+
+	/**
+	 * Custom sequence prefix
+	 *
+	 * @var string
+	 */
+	public $custom_prefix = '';
+
+	/**
 	 * Entry status
 	 *
 	 * @var string 'active'|'spam'|'draft'|'abandoned'
@@ -199,6 +213,8 @@ class Forminator_Form_Entry_Model {
 			$this->entry_type       = $entry_object_cache->entry_type;
 			$this->form_id          = $entry_object_cache->form_id;
 			$this->is_spam          = $entry_object_cache->is_spam;
+			$this->custom_id        = isset( $entry_object_cache->custom_id ) ? $entry_object_cache->custom_id : 0;
+			$this->custom_prefix    = isset( $entry_object_cache->custom_prefix ) ? $entry_object_cache->custom_prefix : '';
 			$this->date_created_sql = $entry_object_cache->date_created_sql;
 			$this->date_created     = $entry_object_cache->date_created;
 			$this->time_created     = $entry_object_cache->time_created;
@@ -209,13 +225,15 @@ class Forminator_Form_Entry_Model {
 			return $entry_object_cache;
 		} else {
 			$table_name = Forminator_Database_Tables::get_table_name( Forminator_Database_Tables::FORM_ENTRY );
-			$sql        = "SELECT `entry_type`, `form_id`, `is_spam`, `date_created`, `draft_id`, `status` FROM {$table_name} WHERE `entry_id` = %d";
+			$sql        = "SELECT `entry_type`, `form_id`, `is_spam`, `custom_id`, `custom_prefix`, `date_created`, `draft_id`, `status` FROM {$table_name} WHERE `entry_id` = %d";
 			$entry      = $wpdb->get_row( $wpdb->prepare( $sql, $entry_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery
 			if ( $entry ) {
 				$this->entry_id         = $entry_id;
 				$this->entry_type       = $entry->entry_type;
 				$this->form_id          = $entry->form_id;
 				$this->is_spam          = $entry->is_spam;
+				$this->custom_id        = isset( $entry->custom_id ) ? absint( $entry->custom_id ) : 0;
+				$this->custom_prefix    = isset( $entry->custom_prefix ) ? $entry->custom_prefix : '';
 				$this->date_created_sql = $entry->date_created;
 				$this->date_created     = date_i18n( 'j M Y', strtotime( $entry->date_created ) );
 				$this->time_created     = date_i18n( 'M j, Y @ g:i A', strtotime( $entry->date_created ) );
@@ -302,7 +320,7 @@ class Forminator_Form_Entry_Model {
 			}
 		}
 		if ( 'abandoned' === $this->status ) {
-			$form_uid = filter_input( INPUT_POST, 'form_uid' );
+			$form_uid = Forminator_Core::sanitize_text_field( 'form_uid' );
 			if ( $form_uid ) {
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 				$meta_id = $wpdb->insert(
@@ -310,7 +328,7 @@ class Forminator_Form_Entry_Model {
 					array(
 						'entry_id'     => $this->entry_id,
 						'meta_key'     => 'form_uid', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-						'meta_value'   => $form_uid, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+						'meta_value'   => maybe_serialize( $form_uid ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
 						'date_created' => ! empty( $entry_date ) ? $entry_date : date_i18n( 'Y-m-d H:i:s' ),
 					)
 				);
@@ -337,9 +355,10 @@ class Forminator_Form_Entry_Model {
 		$sql             = "SELECT `meta_id`, `meta_key`, `meta_value` FROM {$table_meta_name} WHERE `entry_id` = %d";
 		$results         = $db->get_results( $db->prepare( $sql, $this->entry_id ) );
 		foreach ( $results as $result ) {
+			// Entry meta is visitor-influenced; never instantiate PHP objects on load.
 			$this->meta_data[ $result->meta_key ] = array(
 				'id'    => $result->meta_id,
-				'value' => is_array( $result->meta_value ) ? array_map( 'maybe_unserialize', $result->meta_value ) : maybe_unserialize( $result->meta_value ),
+				'value' => forminator_safe_maybe_unserialize( $result->meta_value ),
 			);
 		}
 
@@ -475,14 +494,14 @@ class Forminator_Form_Entry_Model {
 	 * @return int
 	 */
 	private function get_saved_entry_id() {
-		$form_uid = filter_input( INPUT_POST, 'form_uid' );
+		$form_uid = Forminator_Core::sanitize_text_field( 'form_uid' );
 		if ( ! $form_uid ) {
 			return 0;
 		}
 		global $wpdb;
 		$sql      = "SELECT m.entry_id FROM {$this->table_meta_name} m JOIN {$this->table_name} e ON (m.entry_id = e.entry_id)" .
 			" WHERE e.form_id = %d AND e.status = 'abandoned' AND m.meta_key = 'form_uid' AND m.meta_value = %s";
-		$entry_id = $wpdb->get_var( $wpdb->prepare( $sql, $this->form_id, $form_uid ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared
+		$entry_id = $wpdb->get_var( $wpdb->prepare( $sql, $this->form_id, maybe_serialize( $form_uid ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared
 
 		$this->updating_entry = ! empty( $entry_id );
 
@@ -1198,6 +1217,54 @@ class Forminator_Form_Entry_Model {
 	}
 
 	/**
+	 * Get active entry ID by payment identifier.
+	 *
+	 * @since 1.56
+	 *
+	 * @param int    $form_id Form ID.
+	 * @param string $meta_key Payment field meta key.
+	 * @param string $identifier_key Payment identifier key.
+	 * @param string $identifier_value Payment identifier value.
+	 * @param int    $excluded_entry_id Entry ID to exclude from lookup.
+	 * @return int
+	 */
+	public static function get_active_entry_id_by_payment_identifier( $form_id, $meta_key, $identifier_key, $identifier_value, $excluded_entry_id = 0 ) {
+		if ( empty( $form_id ) || empty( $meta_key ) || empty( $identifier_key ) || empty( $identifier_value ) ) {
+			return 0;
+		}
+
+		global $wpdb;
+
+		$table_name       = Forminator_Database_Tables::get_table_name( Forminator_Database_Tables::FORM_ENTRY_META );
+		$entry_table_name = Forminator_Database_Tables::get_table_name( Forminator_Database_Tables::FORM_ENTRY );
+		// Payment fields are stored as serialized meta arrays, so match the exact identifier key/value pair.
+		$identifier_like = '%' . $wpdb->esc_like( ':"' . $identifier_key . '";s:' ) . '%' . $wpdb->esc_like( ':"' . $identifier_value . '"' ) . '%';
+
+		$sql = "SELECT m.`entry_id`
+			FROM {$table_name} m
+			LEFT JOIN {$entry_table_name} e
+			ON ( e.`entry_id` = m.`entry_id` )
+			WHERE e.`form_id` = %d
+			AND e.`status` = 'active'
+			AND e.`entry_id` != %d
+			AND m.`meta_key` = %s
+			AND m.`meta_value` LIKE %s
+			LIMIT 1";
+
+		$entry_id = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$wpdb->prepare(
+				$sql, // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				$form_id,
+				$excluded_entry_id,
+				$meta_key,
+				$identifier_like
+			)
+		);
+
+		return (int) $entry_id;
+	}
+
+	/**
 	 * Bulk delete form entries
 	 *
 	 * @param int   $form_id - the form id.
@@ -1367,8 +1434,7 @@ class Forminator_Form_Entry_Model {
 					$file_path = is_array( $meta_value['file']['file_path'] ) ? $meta_value['file']['file_path'] : array( $meta_value['file']['file_path'] );
 					if ( ! empty( $file_path ) ) {
 						foreach ( $file_path as $key => $path ) {
-							$path = realpath( $path );
-							if ( ! $path || ! file_exists( $path ) ) {
+							if ( ! is_string( $path ) || '' === $path ) {
 								continue;
 							}
 
@@ -1378,18 +1444,20 @@ class Forminator_Form_Entry_Model {
 								continue;
 							}
 
-							$normalized_upload_root = wp_normalize_path( $upload_root );
-							$normalized_path        = wp_normalize_path( $path );
-							if ( ! empty( $normalized_upload_root ) && 0 !== strpos( $normalized_path, $normalized_upload_root ) ) {
+							if ( ! forminator_attachment_path_is_allowed( $path ) ) {
 								continue;
 							}
 
-							wp_delete_file( $path );
+							$delete_attachment = false;
 							if ( isset( $meta_value['file']['file_url'][ $key ] ) ) {
 								$attachment_id = attachment_url_to_postid( $meta_value['file']['file_url'][ $key ] );
 								if ( $attachment_id ) {
-									wp_delete_attachment( $attachment_id );
+									$delete_attachment = wp_delete_attachment( $attachment_id );
 								}
+							}
+
+							if ( ! $delete_attachment ) {
+								wp_delete_file_from_directory( $path, $upload_root );
 							}
 						}
 					}
@@ -1504,6 +1572,10 @@ class Forminator_Form_Entry_Model {
 						$upload_count = 0;
 						$file_values  = is_array( $file['file_url'] ) ? $file['file_url'] : array( $file['file_url'] );
 						foreach ( $file_values as $file_value ) {
+							if ( ! is_scalar( $file_value ) ) {
+								continue;
+							}
+
 							$url       = $file_value;
 							$file_name = basename( $url );
 							$file_name = ! empty( $file_name ) ? $file_name : esc_html__( '(no filename)', 'forminator' );
@@ -1517,11 +1589,12 @@ class Forminator_Form_Entry_Model {
 								$string_value .= '<br/>';
 							}
 
-							$string_value .= '<a href="' . $url . '" rel="noopener noreferrer" target="_blank" title="' . esc_html__( 'View File', 'forminator' ) . '">' . $file_name . '</a>';
+							$string_value .= '<a href="' . esc_url( $url ) . '" rel="noopener noreferrer" target="_blank" title="' . esc_html__( 'View File', 'forminator' ) . '">' . esc_html( $file_name ) . '</a>';
 						}
 					} else {
 						// truncate url.
-						$string_value = is_array( $file['file_url'] ) ? implode( ', ', $file['file_url'] ) : $file['file_url'];
+						$file_urls    = is_array( $file['file_url'] ) ? array_filter( $file['file_url'], 'is_scalar' ) : array( $file['file_url'] );
+						$string_value = implode( ', ', $file_urls );
 						if ( strlen( $string_value ) > $truncate ) {
 							$string_value = substr( $string_value, 0, $truncate ) . '...';
 						}
@@ -2120,7 +2193,7 @@ class Forminator_Form_Entry_Model {
 			return $entries_cache;
 		} else {
 			$table_name = Forminator_Database_Tables::get_table_name( Forminator_Database_Tables::FORM_ENTRY );
-			$sql        = "SELECT count(`entry_id`) FROM {$table_name} WHERE `status` = 'active'";
+			$sql        = "SELECT count(`entry_id`) FROM {$table_name} WHERE `status` != 'spam'";
 			$entries    = $wpdb->get_var( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery
 			if ( $entries ) {
 				wp_cache_set( 'all_form_types', $entries, self::FORM_COUNT_CACHE_GROUP );
@@ -2290,7 +2363,10 @@ class Forminator_Form_Entry_Model {
 				if ( ! method_exists( $connected_addon, 'get_addon_hooks' ) ) {
 					throw new Exception( $addon_slug . ': Method get_addon_hooks doesn\'t exist.' );
 				}
-				$module_hooks    = $connected_addon->get_addon_hooks( $form_id, $module_slug );
+				$module_hooks = $connected_addon->get_addon_hooks( $form_id, $module_slug );
+				if ( ! $module_hooks instanceof Forminator_Integration_Hooks ) {
+					continue;
+				}
 				$addon_meta_data = forminator_find_addon_meta_data_from_entry_model( $connected_addon, $entry_model );
 				$module_hooks->on_before_delete_entry( $entry_model, $addon_meta_data );
 			} catch ( Exception $e ) {
@@ -2542,7 +2618,8 @@ class Forminator_Form_Entry_Model {
 		$updated_meta = array(
 			'entry_id'   => $this->entry_id,
 			'meta_key'   => $meta_key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
-			'meta_value' => $default_value, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			// Mirror set_fields(): serialize consistently so raw object payloads are never stored as-is.
+			'meta_value' => maybe_serialize( $default_value ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
 		);
 
 		if ( ! empty( $date_updated ) ) {
@@ -2717,12 +2794,23 @@ class Forminator_Form_Entry_Model {
 			$where .= $wpdb->prepare( ' AND metas.meta_value LIKE %s', '%' . $wpdb->esc_like( $args['search'] ) . '%' );
 		}
 
-		if ( isset( $args['min_id'] ) ) {
-			$where .= $wpdb->prepare( ' AND entries.entry_id >= %d', esc_sql( $args['min_id'] ) );
-		}
+		if ( isset( $args['min_id'] ) || isset( $args['max_id'] ) ) {
+			$entry_id_conds  = array( 'entries.custom_id = 0' );
+			$custom_id_conds = array( 'entries.custom_id > 0' );
 
-		if ( isset( $args['max_id'] ) ) {
-			$where .= $wpdb->prepare( ' AND entries.entry_id <= %d', esc_sql( $args['max_id'] ) );
+			if ( isset( $args['min_id'] ) && is_numeric( $args['min_id'] ) ) {
+				$entry_id_conds[]  = $wpdb->prepare( 'entries.entry_id >= %d', absint( $args['min_id'] ) );
+				$custom_id_conds[] = $wpdb->prepare( 'entries.custom_id >= %d', absint( $args['min_id'] ) );
+			}
+
+			if ( isset( $args['max_id'] ) && is_numeric( $args['max_id'] ) ) {
+				$entry_id_conds[]  = $wpdb->prepare( 'entries.entry_id <= %d', absint( $args['max_id'] ) );
+				$custom_id_conds[] = $wpdb->prepare( 'entries.custom_id <= %d', absint( $args['max_id'] ) );
+			}
+
+			if ( ! empty( $entry_id_conds ) ) {
+				$where .= ' AND ((' . implode( ' AND ', $entry_id_conds ) . ') OR (' . implode( ' AND ', $custom_id_conds ) . '))';
+			}
 		}
 
 		if ( isset( $args['entry_status'] ) && 'completed' === $args['entry_status'] ) {
@@ -2795,6 +2883,10 @@ class Forminator_Form_Entry_Model {
 			 * @since 1.5.4
 			 */
 			$order = apply_filters( 'forminator_query_entries_order', $order, $args );
+
+			if ( 'entries.date_created' === $args['order_by'] ) {
+				$order .= ', entries.entry_id ' . $order;
+			}
 		}
 
 		// limit.
@@ -2879,7 +2971,13 @@ class Forminator_Form_Entry_Model {
 		if ( empty( $option['limit'] ) ) {
 			return false;
 		}
-		$entries = self::select_count_entries_by_meta_field( $module_id, $field_name, $option['value'], $option['label'], $field_type );
+		$entries = self::select_count_entries_by_meta_field(
+			$module_id,
+			$field_name,
+			forminator_normalize_choice_option_value( $option['value'] ),
+			forminator_normalize_choice_option_value( $option['label'] ),
+			$field_type
+		);
 
 		if ( $option['limit'] <= $entries ) {
 			return true;
@@ -2948,12 +3046,13 @@ class Forminator_Form_Entry_Model {
 		$field_label_encoded = htmlspecialchars( $field_label, ENT_QUOTES );
 
 		if ( 'single' === $option_type ) {
+			// Do not pre-escape with esc_sql(); $wpdb->prepare() escapes %s and combining both double-escapes special characters like '.
 			$condition = $wpdb->prepare(
 				' AND m.`meta_value` IN (%s, %s, %s, %s)',
-				esc_sql( $field_value ),
-				esc_sql( $field_label ),
-				esc_sql( $field_value_encoded ),
-				esc_sql( $field_label_encoded )
+				$field_value,
+				$field_label,
+				$field_value_encoded,
+				$field_label_encoded
 			);
 		} else {
 			// todo: change this condition to check if it's multiple one - do this, otherwise do the previous code block.

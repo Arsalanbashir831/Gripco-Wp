@@ -183,7 +183,7 @@ class Forminator_MultiValue extends Forminator_Field {
 			$label .= $required ? ' ' . forminator_get_required_icon() : '';
 			$html  .= sprintf(
 				'<span id="%s" class="forminator-label">%s</span>',
-				'forminator-checkbox-group-' . $id . '-' . $uniq_id . '-label',
+				esc_attr( 'forminator-checkbox-group-' . $id . '-' . $uniq_id . '-label' ),
 				$label
 			);
 		}
@@ -274,11 +274,11 @@ class Forminator_MultiValue extends Forminator_Field {
 
 				$html .= sprintf(
 					'<input type="checkbox" name="%s" value="%s" id="%s" aria-labelledby="%s" data-calculation="%s" %s %s%s/>',
-					$name,
+					esc_attr( $name ),
 					esc_html( $value ),
-					$input_id,
-					$label_id,
-					$calculation_value,
+					esc_attr( $input_id ),
+					esc_attr( $label_id ),
+					esc_attr( $calculation_value ),
 					$selected,
 					$hidden_calc_behavior,
 					( ! empty( $description ) ? ' aria-describedby="' . esc_attr( $id . '-' . $uniq_id . '-description' ) . '"' : '' )
@@ -415,10 +415,11 @@ class Forminator_MultiValue extends Forminator_Field {
 	 * @param array|string $data Data.
 	 */
 	public function validate( $field, $data ) {
-		$id = self::get_property( 'element_id', $field );
+		$id            = self::get_property( 'element_id', $field );
+		$option_values = array_map( 'forminator_normalize_choice_option_value', array_column( $field['options'], 'value' ) );
 
 		foreach ( $data as $value ) {
-			if ( false === array_search( strval( htmlspecialchars_decode( $value ) ), array_map( 'strval', array_column( $field['options'], 'value' ) ), true ) ) {
+			if ( false === array_search( forminator_normalize_choice_option_value( $value ), $option_values, true ) ) {
 				$this->validation_message[ $id ] = apply_filters(
 					'forminator_checkbox_field_nonexistent_validation_message',
 					esc_html__( 'Selected value does not exist.', 'forminator' ),
@@ -472,14 +473,7 @@ class Forminator_MultiValue extends Forminator_Field {
 	public function sanitize( $field, $data ) {
 		$original_data = $data;
 
-		// Sanitize.
-		if ( is_array( $data ) ) {
-			foreach ( $data as $key => $val ) {
-				$data[ $key ] = trim( wp_kses_post( $val ) );
-			}
-		} else {
-			$data = trim( wp_kses_post( $data ) );
-		}
+		$data = $this->sanitize_choice_data( $data );
 
 		return apply_filters( 'forminator_field_multi_sanitize', $data, $field, $original_data );
 	}

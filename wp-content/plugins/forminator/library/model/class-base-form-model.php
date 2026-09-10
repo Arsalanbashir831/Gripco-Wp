@@ -1061,9 +1061,10 @@ abstract class Forminator_Base_Form_Model {
 			 * Forminator_Form_Field_Model
 			 *
 			 * @var Forminator_Form_Field_Model $field */
-			if ( strpos( $field->form_id, 'wrapper-' ) === 0 ) {
+			$form_id = '';
+			if ( ! empty( $field->form_id ) && strpos( (string) $field->form_id, 'wrapper-' ) === 0 ) {
 				$form_id = $field->form_id;
-			} else {
+			} elseif ( ! empty( $field->formID ) ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
 				// Backward Compat.
 				$form_id = $field->formID; // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
 			}
@@ -1837,8 +1838,39 @@ abstract class Forminator_Base_Form_Model {
 		}
 
 		if ( $can_show['can_submit'] ) {
-			// disable submit if status is draft.
-			if ( self::STATUS_DRAFT === $this->status ) {
+			$is_leads = isset( $form_settings['form-type'] ) && 'leads' === $form_settings['form-type'];
+			if ( $is_leads ) {
+				// Check if the lead form is connected to a quiz and if the quiz is published.
+				$lead_quiz_id = Forminator_Core::sanitize_text_field( 'lead_quiz' );
+				if ( ! empty( $lead_quiz_id ) ) {
+					$lead_quiz               = $this->get_model( $lead_quiz_id );
+					$invalid_module_response = array(
+						'can_submit' => false,
+						'error'      => esc_html__( 'Error: Invalid module ID.', 'forminator' ),
+					);
+					if ( empty( $lead_quiz ) ) {
+						$can_show = $invalid_module_response;
+					} else {
+						$has_lead = $lead_quiz->settings['hasLeads'] ?? false;
+						$lead_id  = $lead_quiz->settings['leadsId'] ?? false;
+						if ( ! $has_lead || (int) $lead_id !== (int) $this->id ) {
+							$can_show = $invalid_module_response;
+						} elseif ( self::STATUS_PUBLISH !== $lead_quiz->status || 'leads' !== $this->status ) {
+							$can_show = array(
+								'can_submit' => false,
+								/* translators: %s: module slug */
+								'error'      => sprintf( esc_html__( 'This %s is not published.', 'forminator' ), $module_slug ),
+							);
+						}
+					}
+				} else {
+					$can_show = array(
+						'can_submit' => false,
+						/* translators: %s: module slug */
+						'error'      => sprintf( esc_html__( 'This %s is not published.', 'forminator' ), $module_slug ),
+					);
+				}
+			} elseif ( self::STATUS_PUBLISH !== $this->status ) {
 				$can_show = array(
 					'can_submit' => false,
 					/* translators: %s: module slug */

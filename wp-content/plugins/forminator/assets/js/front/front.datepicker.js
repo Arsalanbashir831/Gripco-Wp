@@ -148,6 +148,13 @@
 				},
 			});
 
+			this.$el.on('change paste', function () {
+				var $input = $(this);
+				setTimeout(function () {
+					$input.valid();
+				}, 0);
+			});
+
 			//Disables google translator for the datepicker - this prevented that when selecting the date the result is presented as follows: NaN/NaN/NaN
 			$('.ui-datepicker').addClass('notranslate');
 
@@ -240,9 +247,11 @@
 		},
 
 		getLimitDate: function ( dependentField, offset ) {
-			var fieldVal = $('input[name ="'+ dependentField + '"]').val();
+			var $form = this.$el.closest( '.forminator-custom-form' ),
+				$dependentInput = $form.find( 'input[name ="' + dependentField + '"]' ),
+				fieldVal = $dependentInput.val();
 			if( typeof fieldVal !== 'undefined' ) {
-				var DateFormat = $('input[name ="'+ dependentField + '"]').data('format').replace(/y/g, 'yy'),
+				var DateFormat = $dependentInput.data('format').replace(/y/g, 'yy'),
 					sdata = offset.split('_'),
 					newDate = moment( fieldVal, DateFormat.toUpperCase() );
 				if( '-' === sdata[0] ) {

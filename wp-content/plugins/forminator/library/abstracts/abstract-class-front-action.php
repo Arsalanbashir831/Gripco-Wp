@@ -219,7 +219,7 @@ abstract class Forminator_Front_Action {
 	 * @param array $prepared_data Submitted data.
 	 * @return array Updated submitted data array
 	 */
-	private static function make_nice_group_suffixes( $prepared_data ) {
+	protected static function make_nice_group_suffixes( $prepared_data ) {
 		$new_suffixes = array();
 		foreach ( $prepared_data as $key => $suffixes ) {
 			if ( 0 !== strpos( $key, 'group-' ) || '-copies' !== substr( $key, -7 ) ) {
@@ -232,7 +232,12 @@ abstract class Forminator_Front_Action {
 				// prepare FILES.
 				$relevant_file_keys = preg_grep( '/-' . $suffix . '$/', array_keys( $_FILES ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
 				foreach ( $relevant_file_keys as $file_key ) {
-					$new_key            = str_replace( $suffix, $index + 2, $file_key );
+					$new_key = str_replace( $suffix, $index + 2, $file_key );
+					// On draft reload suffixes are already numeric, so the key can be unchanged.
+					// Skip to avoid self-assigning and then unsetting the same key, which would drop the upload.
+					if ( $new_key === $file_key ) {
+						continue;
+					}
 					$_FILES[ $new_key ] = $_FILES[ $file_key ]; // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput
 					unset( $_FILES[ $file_key ] );
 				}
@@ -242,6 +247,10 @@ abstract class Forminator_Front_Action {
 					if ( ! empty( $multi_file_keys ) ) {
 						foreach ( $multi_file_keys as $mfile_key ) {
 							$new_mkey = str_replace( $suffix, $index + 2, $mfile_key );
+							// Same as above: skip unchanged keys so reloaded-draft uploads are not unset.
+							if ( $new_mkey === $mfile_key ) {
+								continue;
+							}
 							$prepared_data['forminator-multifile-hidden'][ $new_mkey ] = $prepared_data['forminator-multifile-hidden'][ $mfile_key ];
 							unset( $prepared_data['forminator-multifile-hidden'][ $mfile_key ] );
 						}
@@ -543,6 +552,7 @@ abstract class Forminator_Front_Action {
 		$send_draft_email_nonce = esc_attr( 'forminator_nonce_email_draft_link_' . $response['draft_id'] );
 		$message                = str_replace( '{retention_period}', $response['retention_period'], $response['message'] );
 		$message                = forminator_replace_form_data( $message, static::$module_object );
+		$message                = forminator_replace_variables( $message, $form_id );
 		$autofill_email         = isset( $response['first_email'] ) ? $response['first_email'] : '';
 
 		ob_start();

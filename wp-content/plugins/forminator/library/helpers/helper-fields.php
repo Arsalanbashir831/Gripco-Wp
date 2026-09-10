@@ -12,14 +12,19 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Return custom form
  *
- * @param int  $id Id.
- * @param bool $is_preview Is preview?.
- * @param bool $is_block_editor Is block editor?.
+ * @param int      $id Id.
+ * @param bool     $is_preview Is preview?.
+ * @param bool     $is_block_editor Is block editor?.
+ * @param int|null $forced_render_id Optional. Force render ID for unique selectors.
  *
  * @since 1.0
  * @return mixed
  */
-function forminator_form( $id, $is_preview = false, $is_block_editor = false ) {
+function forminator_form( $id, $is_preview = false, $is_block_editor = false, $forced_render_id = null ) {
+	if ( is_numeric( $forced_render_id ) ) {
+		Forminator_CForm_Front::get_instance()->generate_render_id( $id, (int) $forced_render_id );
+	}
+
 	$view = new Forminator_CForm_Front();
 
 	return $view->render_shortcode(
@@ -129,6 +134,7 @@ function forminator_stripslashes_deep( $val ) {
  */
 function forminator_sanitize_field( &$field, $key = null ) {
 	if ( 'question_description' === $key ) {
+		$field = forminator_remove_zero_width_chars( $field );
 		return wp_kses_post( $field );
 	}
 	// If array map all fields.
@@ -137,7 +143,28 @@ function forminator_sanitize_field( &$field, $key = null ) {
 		return $field;
 	}
 
+	$field = forminator_remove_zero_width_chars( $field );
+
 	return sanitize_text_field( $field );
+}
+
+/**
+ * Removes zero-width characters from a string.
+ *
+ * @since 1.56
+ *
+ * @param string $content Content to remove zero width characters from.
+ * @return string
+ */
+function forminator_remove_zero_width_chars( $content ) {
+	if ( ! is_string( $content ) ) {
+		return $content;
+	}
+	return preg_replace(
+		'/[\x{200B}\x{200C}\x{200D}\x{2060}\x{FEFF}]/u',
+		'',
+		$content
+	);
 }
 
 /**
@@ -160,6 +187,9 @@ function forminator_sanitize_array_field( $fields ) {
 	);
 
 	foreach ( $fields as $key => &$value ) {
+		if ( ! is_array( $value ) ) {
+			$value = forminator_remove_zero_width_chars( $value );
+		}
 		if ( is_array( $value ) ) {
 			$value = forminator_sanitize_array_field( $value );
 		} elseif ( in_array( $key, $allow_html, true ) ) {
@@ -194,6 +224,28 @@ function forminator_decode_html_entity( $fields ) {
 	}
 
 	return $fields;
+}
+
+/**
+ * Return choice option value as submitted on the front end.
+ *
+ * Decodes entities, strips HTML tags, and trims whitespace so builder values match browser POST data.
+ *
+ * @since 1.56.0
+ *
+ * @param mixed $value Option value or label from field settings.
+ *
+ * @return string
+ */
+function forminator_normalize_choice_option_value( $value ) {
+	if ( ! is_scalar( $value ) ) {
+		return '';
+	}
+
+	$decoded  = htmlspecialchars_decode( (string) $value, ENT_QUOTES );
+	$stripped = wp_strip_all_tags( $decoded );
+
+	return trim( $stripped );
 }
 
 /**
@@ -247,7 +299,7 @@ function forminator_sort_fields_with_groups( array $fields ): array {
  * @return string
  */
 function forminator_sanitize_textarea( $field ) {
-
+	$field = forminator_remove_zero_width_chars( $field );
 	return sanitize_textarea_field( $field );
 }
 
@@ -741,6 +793,20 @@ function forminator_replace_form_data( $content, ?Forminator_Form_Model $custom_
 			if ( is_null( $value ) ) {
 				$value = '';
 			}
+			if ( '' === $value ) {
+				/**
+				 * Filter the replacement value for empty field placeholders.
+				 *
+				 * By default an empty string is used. Hooking into this filter allows
+				 * replacing empty fields with a custom value (e.g. "N/A" in email notifications).
+				 *
+				 * @since 1.57.0
+				 *
+				 * @param string $value      The replacement value. Default empty string.
+				 * @param string $element_id The field element ID (e.g. "text-1").
+				 */
+				$value = apply_filters( 'forminator_empty_field_placeholder', $value, $element_id );
+			}
 			if ( ! $urlencode ) {
 				$content = forminator_replace_placeholder_in_urls( $content, $match, $value );
 			}
@@ -810,6 +876,10 @@ function forminator_get_value_from_form_entry( $element_id, ?Forminator_Form_Mod
 		$value = forminator_get_field_from_form_entry( $element_id, $custom_form, $entry, $user_meta );
 
 		if ( strpos( $element_id, 'html' ) !== false ) {
+			if ( is_null( $value ) ) {
+				$value = '';
+			}
+
 			// For repeated html copies (e.g. html-1-2), rewrite sibling field placeholders
 			// inside the HTML content so {name-1} resolves to name-1-2 for the second copy.
 			$explode = explode( '-', $element_id );
@@ -861,6 +931,9 @@ function forminator_get_value_from_form_entry( $element_id, ?Forminator_Form_Mod
 	if ( false !== strpos( $element_id, 'group' ) ) {
 		$value = forminator_prepare_formatted_group_field( $element_id, $custom_form, $entry, false, $is_pdf );
 	}
+
+	// Address and rating fields submit a value even when untouched.
+	$value = forminator_maybe_replace_empty_field_value( $value, $element_id );
 
 	// If array, convert it to string.
 	if ( is_array( $value ) ) {
@@ -916,11 +989,6 @@ function forminator_resolve_draft_display_value( $entry, $element_id, $field_typ
 	$custom_val = $entry->get_meta( 'custom-' . $element_id, '' );
 	if ( '' !== $custom_val ) {
 		$data[ 'custom-' . $element_id ] = $custom_val;
-	}
-
-	// When storing values (not labels), only process if there's a custom option to resolve.
-	if ( $print_value && ! isset( $data[ 'custom-' . $element_id ] ) ) {
-		return $value;
 	}
 
 	$label = forminator_replace_field_data( $form, $element_id, $data, false, $print_value );
@@ -1001,7 +1069,7 @@ function forminator_replace_field_data( $custom_form, $element_id, $data, $is_pd
 						$display_items[] = $display_text;
 					}
 				} else {
-					$display_items[] = $selected_value;
+					$display_items[] = $is_email ? esc_html( $selected_value ) : $selected_value;
 				}
 			}
 
@@ -1177,6 +1245,10 @@ function forminator_prepare_formatted_form_entry(
 		if ( is_null( $form_fields ) ) {
 			$form_fields = array();
 		}
+		if ( $exclude_empty ) {
+			// Use PHP_INT_MAX to run after any consumer-added filters and ensure empty fields are excluded, not shown as "N/A".
+			add_filter( 'forminator_empty_field_placeholder', '__return_empty_string', PHP_INT_MAX );
+		}
 	} else {
 		$rendering_group = true;
 	}
@@ -1199,6 +1271,10 @@ function forminator_prepare_formatted_form_entry(
 		} elseif ( 'html' === $field_type ) {
 			$label = $form_field->__get( 'field_label' );
 			$value = $form_field->__get( 'variations' );
+			if ( is_null( $value ) ) {
+				$value = '';
+			}
+
 			if ( $repeater_suffix ) {
 				$value = forminator_rewrite_html_field_placeholders( $value, $form_field->parent_group, ltrim( $repeater_suffix, '-' ), $custom_form );
 			}
@@ -1265,6 +1341,10 @@ function forminator_prepare_formatted_form_entry(
 		}
 	}
 	$html .= '</' . $list_tag . '><br/>';
+
+	if ( ! $rendering_group && $exclude_empty ) {
+		remove_filter( 'forminator_empty_field_placeholder', '__return_empty_string', PHP_INT_MAX );
+	}
 
 	return $html;
 }
@@ -1361,7 +1441,23 @@ function forminator_get_formatted_form_name( Forminator_Form_Model $custom_form,
  * @return string
  */
 function forminator_get_submission_id( ?Forminator_Form_Model $custom_form = null, $entry = null ) {
-	return is_object( $entry ) && isset( $entry->entry_id ) ? esc_html( $entry->entry_id ) : 0;
+	$entry_id = 0;
+	if ( is_object( $entry ) && isset( $entry->entry_id ) ) {
+		$entry_id = absint( $entry->entry_id );
+	}
+
+	if ( ! is_object( $entry ) || ! $entry_id ) {
+		return '0';
+	}
+
+	$custom_id = isset( $entry->custom_id ) ? absint( $entry->custom_id ) : 0;
+	if ( $custom_id < 1 ) {
+		return (string) $entry_id;
+	}
+
+	$prefix = isset( $entry->custom_prefix ) ? forminator_custom_sequence_normalize_prefix( $entry->custom_prefix ) : '';
+
+	return $prefix . $custom_id;
 }
 
 /**
@@ -1602,6 +1698,84 @@ function forminator_replace_variables( $content, $id = false, $entry = null ) {
 }
 
 /**
+ * Check whether a stored field value holds no user input
+ *
+ * An empty() check is not enough: address and name fields store an array of empty
+ * subfields and an untouched rating field stores "0/{max_rating}".
+ *
+ * @since 1.57.0
+ *
+ * @param mixed  $value      Stored field value.
+ * @param string $element_id Field element ID, e.g. "address-1".
+ *
+ * @return bool
+ */
+function forminator_field_value_has_no_input( $value, $element_id = '' ) {
+	// 0 is the placeholder option of the rating dropdown, it can't be selected.
+	if ( is_string( $value ) && 0 === strpos( $element_id, 'rating-' ) ) {
+		$rating_value = explode( '/', $value );
+
+		return empty( $rating_value[0] );
+	}
+
+	if ( is_array( $value ) ) {
+		/**
+		 * Filter the subfields that are stored automatically
+		 *
+		 * They are kept even when nothing was submitted, e.g. the format of a date field.
+		 *
+		 * @since 1.57.0
+		 *
+		 * @param array  $auto_filled_subfields Subfield keys that hold no user input.
+		 * @param string $element_id            The field element ID (e.g. "date-1").
+		 */
+		$auto_filled_subfields = apply_filters( 'forminator_auto_filled_subfields', array( 'format', 'ampm' ), $element_id );
+
+		$value = array_diff_key( $value, array_flip( $auto_filled_subfields ) );
+
+		foreach ( $value as $sub_value ) {
+			if ( ! forminator_field_value_has_no_input( $sub_value ) ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	return null === $value || '' === $value;
+}
+
+/**
+ * Replace a field value that holds no user input with the empty field placeholder
+ *
+ * The stored value is returned untouched when no replacement is provided.
+ *
+ * @since 1.57.0
+ *
+ * @param mixed  $value      Stored field value.
+ * @param string $element_id Field element ID, e.g. "address-1".
+ *
+ * @return mixed
+ */
+function forminator_maybe_replace_empty_field_value( $value, $element_id ) {
+	if ( ! forminator_field_value_has_no_input( $value, $element_id ) ) {
+		return $value;
+	}
+
+	/**
+	 * Filter the replacement value for empty field placeholders.
+	 *
+	 * @since 1.57.0
+	 *
+	 * @param string $value      The replacement value. Default empty string.
+	 * @param string $element_id The field element ID (e.g. "text-1").
+	 */
+	$placeholder = apply_filters( 'forminator_empty_field_placeholder', '', $element_id );
+
+	return '' !== $placeholder ? $placeholder : $value;
+}
+
+/**
  * Render entry
  * Used in email notifications
  * TODO: refactor this
@@ -1636,6 +1810,19 @@ function render_entry( $item, $column_name, $field = null, $type = '', $remove_e
 
 	if ( $is_calculation && $data ) {
 		return Forminator_Form_Entry_Model::meta_value_to_string( 'calculation', $data, true, PHP_INT_MAX, $field );
+	}
+
+	// Treat a field that stores a value while holding no input, e.g. an empty address, as empty.
+	if ( forminator_field_value_has_no_input( $data, $column_name ) ) {
+		if ( $remove_empty ) {
+			return '';
+		}
+
+		// Return a replacement only, the stored value is rendered below.
+		$placeholder = forminator_maybe_replace_empty_field_value( $data, $column_name );
+		if ( is_string( $placeholder ) && '' !== $placeholder ) {
+			return $placeholder;
+		}
 	}
 
 	if ( $data || '0' === $data ) {
@@ -1772,7 +1959,7 @@ function render_entry( $item, $column_name, $field = null, $type = '', $remove_e
 									}
 								}
 
-									// Featured Image.
+								// Featured Image.
 								if ( ! empty( $data['value']['post-image'] ) && ! empty( $data['value']['post-image']['attachment_id'] ) ) {
 									$post_image_id = $data['value']['post-image']['attachment_id'];
 									$image_label   = $field['post_image_label'] ?? esc_html__( 'Featured image', 'forminator' );
@@ -1926,6 +2113,10 @@ function render_entry( $item, $column_name, $field = null, $type = '', $remove_e
 								if ( 'amount' === $key_slug && in_array( $field['type'], array( 'stripe', 'stripe-ocs', 'paypal' ), true ) ) {
 									$value = Forminator_Field::get_formatted_amount( $field, $data );
 								}
+								if ( ! $remove_empty ) {
+									// Replace the subfields the user left empty.
+									$value = forminator_maybe_replace_empty_field_value( $value, $column_name );
+								}
 								if ( $remove_empty && empty( $value ) ) {
 									$output .= '';
 								} elseif ( $show_label ) {
@@ -1987,6 +2178,7 @@ function render_entry( $item, $column_name, $field = null, $type = '', $remove_e
 		}
 	}
 
+	// Empty values are replaced above, a falsy value like 0 is real data.
 	return '';
 }
 
@@ -2014,6 +2206,29 @@ function forminator_old_field( $element_id, $fields, $form_id ) {
 	}
 
 	return $old_field;
+}
+
+/**
+ * Get a mapped field ID only when it still points to an active form field.
+ * This keeps saved mappings safe when a form field was later deleted or disabled.
+ *
+ * @param string $element_id Field slug.
+ * @param array  $fields Fields.
+ * @param int    $form_id Form id.
+ * @return string
+ */
+function forminator_get_active_mapped_field_id( $element_id, $fields, $form_id ) {
+	$element_id = forminator_clear_field_id( $element_id );
+
+	if ( empty( $element_id ) || empty( $form_id ) ) {
+		return '';
+	}
+
+	if ( forminator_old_field( $element_id, $fields, $form_id ) ) {
+		return '';
+	}
+
+	return $element_id;
 }
 
 /**
@@ -3125,6 +3340,75 @@ function forminator_get_upload_url( $form_id, $dir = '' ) {
 	return $upload_url;
 }
 
+/**
+ * Check whether a file path resolves inside the WordPress uploads directory.
+ *
+ * @since 1.55.1
+ *
+ * @param string|array $path File path or list of paths.
+ * @return bool
+ */
+function forminator_attachment_path_is_allowed( $path ) {
+	$paths = is_array( $path ) ? $path : array( $path );
+
+	if ( empty( $paths ) ) {
+		return false;
+	}
+
+	/**
+	 * Short-circuit attachment path validation.
+	 *
+	 * @since 1.56.0
+	 *
+	 * @param bool|null    $allowed Null for default checks; bool to override.
+	 * @param string|array $path    File path or list of paths.
+	 */
+	$pre = apply_filters( 'pre_forminator_attachment_path_is_allowed', null, $path );
+	if ( null !== $pre ) {
+		return (bool) $pre;
+	}
+
+	$upload_dir = wp_upload_dir();
+	if ( empty( $upload_dir['basedir'] ) ) {
+		return false;
+	}
+
+	$basedir = $upload_dir['basedir'];
+
+	foreach ( $paths as $single_path ) {
+		if ( ! is_string( $single_path ) || '' === $single_path ) {
+			return false;
+		}
+
+		// Stream paths (e.g. S3-Uploads): skip realpath().
+		if ( wp_is_stream( $single_path ) ) {
+			$real_file      = wp_normalize_path( $single_path );
+			$real_directory = wp_normalize_path( $basedir );
+
+			// realpath() can't collapse "../" on a stream, so reject traversal explicitly.
+			if ( preg_match( '#(^|/)\.\.(/|$)#', $real_file ) ) {
+				return false;
+			}
+		} else {
+			$real_file      = realpath( $single_path );
+			$real_directory = realpath( $basedir );
+
+			if ( false === $real_file || false === $real_directory ) {
+				return false;
+			}
+
+			$real_file      = wp_normalize_path( $real_file );
+			$real_directory = wp_normalize_path( $real_directory );
+		}
+
+		if ( 0 !== strpos( $real_file, trailingslashit( $real_directory ) ) ) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
 
 /**
  * Replace lead form data
@@ -3381,11 +3665,17 @@ function forminator_allowed_mime_types( $mimes = array(), $allow = true ) {
 		$mimes = get_allowed_mime_types();
 	}
 	if ( ! $allow ) {
-		$filters = array( 'htm|html', 'js', 'jse', 'jar', 'php', 'php3', 'php4', 'php5', 'phtml', 'svg', 'swf', 'exe', 'html', 'htm', 'shtml', 'xhtml', 'xml', 'css', 'asp', 'aspx', 'jsp', 'sql', 'hta', 'dll', 'bat', 'com', 'sh', 'bash', 'py', 'pl', 'dfxp', 'rar' );
+		$blocked_extensions = array( 'htm', 'html', 'js', 'jse', 'jar', 'php', 'php3', 'php4', 'php5', 'phtml', 'svg', 'swf', 'exe', 'shtml', 'xhtml', 'xml', 'css', 'asp', 'aspx', 'jsp', 'sql', 'hta', 'dll', 'bat', 'com', 'sh', 'bash', 'py', 'pl', 'dfxp', 'rar' );
+
 		foreach ( array_keys( $mimes ) as $mime_key ) {
-			$key = strtolower( $mime_key );
-			if ( in_array( $key, $filters, true ) ) {
-				unset( $mimes[ $mime_key ] );
+			$alternatives = explode( '|', strtolower( (string) $mime_key ) );
+			foreach ( $alternatives as $alternative ) {
+				// Normalize pattern-style keys to a plain extension.
+				$extension = preg_replace( '/[^a-z0-9]/', '', $alternative );
+				if ( ( '' !== $alternative && '' === $extension ) || in_array( $extension, $blocked_extensions, true ) ) {
+					unset( $mimes[ $mime_key ] );
+					break;
+				}
 			}
 		}
 	}
@@ -3906,7 +4196,7 @@ function forminator_render_rating_field( $rating_value, $rating_items ) {
  * @return bool
  */
 function forminator_can_display_as_image( $file_url ) {
-	$image_extensions = array( 'jpg', 'jpeg', 'jpe', 'gif', 'png', 'bmp', 'tiff', 'tif', 'ico', 'webp', 'heic' );
+	$image_extensions = array( 'jpg', 'jpeg', 'jpe', 'gif', 'png', 'bmp', 'tiff', 'tif', 'ico', 'webp', 'heic', 'heif', 'avif' );
 	$file_extension   = strtolower( pathinfo( $file_url, PATHINFO_EXTENSION ) );
 
 	return in_array( $file_extension, $image_extensions, true );

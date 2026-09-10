@@ -205,20 +205,21 @@
 						},
 						success: function (data) {
 							var element = self.element,
+								responseData = ( 'undefined' !== typeof data.data ) ? data.data : {},
 								current_file = {
 									success: data.success,
-									message: 'undefined' !== data.data.message ? data.data.message : '',
+									message: 'undefined' !== typeof responseData.message ? responseData.message : '',
 									file_id: unique_id,
-									file_name: 'undefined' !== typeof data.data.file_url ? data.data.file_url.replace(/^.*[\\\/]/, '') : item.name,
+									file_name: 'undefined' !== typeof responseData.file_url ? responseData.file_url.replace(/^.*[\\\/]/, '') : item.name,
 									mime_type: item.type,
 								};
 							self.add_upload_file( element, current_file );
-							if ( true === data.success && true === data.data.success && 'undefined' !== typeof data.data ) {
+							if ( true === data.success && true === responseData.success ) {
 								self.upload_success_response( unique_id );
 								self.$el.trigger('success:forminator:multiple:upload', uploadData);
 							} else {
-								self.upload_fail_response( unique_id, data.data.message );
-								if( 'undefined' !== typeof data.data.error_type && 'limit' === data.data.error_type ) {
+								self.upload_fail_response( unique_id, responseData.message || window.ForminatorFront.cform.process_error );
+								if( 'undefined' !== typeof responseData.error_type && 'limit' === responseData.error_type ) {
 									self.form.find('#' + unique_id).addClass('forminator-upload-limit_error');
 								}
 								self.$el.trigger('fail:forminator:multiple:upload', uploadData);
@@ -229,6 +230,7 @@
 							if ( uploadRequests[self.form_id] === uploadCompleted[self.form_id] ) {
 								self.form.find('.forminator-button-submit, .forminator-button-next').attr( 'disabled', false ).removeAttr( 'data-uploading' );
 							}
+							self.form.find( '.forminator-field-' + self.element + '-' + self.form_id ).val( '' );
 							self.$el.trigger('complete:forminator:multiple:upload', uploadData);
 							self.$el.find('input[type="file"]').trigger('forminator.change', 'forminator_emulate_trigger' );
 						},
@@ -491,6 +493,7 @@
 				uploaded_value = this.form.find( '.forminator-multifile-hidden' );
 			upload_file[ element ] = files;
 			uploaded_value.val( JSON.stringify( upload_file ) );
+			uploaded_value.trigger( 'forminator.change', 'forminator_emulate_trigger' );
 		},
 
 		/**
@@ -577,6 +580,7 @@
 					self.form.trigger( 'forminator:uploads:valid' );
 					self.form.find('.forminator-button-submit').attr( 'disabled', false );
 				}
+				uploaded_value.trigger( 'forminator.change', 'forminator_emulate_trigger' );
 				fileInput.trigger( 'forminator.change', 'forminator_emulate_trigger' );
 				self.$el.trigger('delete:forminator:multiple:upload');
 			})

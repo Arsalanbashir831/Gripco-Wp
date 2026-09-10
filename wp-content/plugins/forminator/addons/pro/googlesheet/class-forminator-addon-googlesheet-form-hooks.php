@@ -137,38 +137,45 @@ class Forminator_Googlesheet_Form_Hooks extends Forminator_Integration_Form_Hook
 
 			$raw_data = Forminator_CForm_Front_Action::$prepared_data;
 
+			$current_form_fields    = self::maybe_add_group_cloned_fields( $this->settings_instance->get_form_fields() );
+			$current_form_field_ids = array_fill_keys( array_column( $current_form_fields, 'element_id' ), true );
+
 			$values = array();
 			foreach ( $header_fields as $element_id => $header_field ) {
-				$field_type = Forminator_Core::get_field_type( $element_id );
-				$field      = $module->get_field( $element_id );
+				$form_value = '';
+				$field_type = '';
+				if ( isset( $current_form_field_ids[ $element_id ] ) ) {
+					$field_type = Forminator_Core::get_field_type( $element_id );
+					$field      = $module->get_field( $element_id );
 
-				$meta_value = '';
-				// take from entry fields (to be saved).
-				if ( isset( $form_entry_fields[ $element_id ] ) ) {
-					$meta_value = $form_entry_fields[ $element_id ]['value'];
-				} elseif ( isset( $submitted_data[ $element_id ] ) ) {
-					// fallback to submitted_data.
-					$meta_value = $submitted_data[ $element_id ];
-				}
-				forminator_addon_maybe_log( __METHOD__, $field_type, $meta_value );
-
-				if ( in_array( $field_type, array( 'paypal', 'stripe', 'stripe-ocs' ), true ) ) {
-					if ( isset( $meta_value['amount'] ) ) {
-						$meta_value['amount'] = Forminator_Field::get_formatted_amount( $field, $meta_value, $module );
+					$meta_value = '';
+					// take from entry fields (to be saved).
+					if ( isset( $form_entry_fields[ $element_id ] ) ) {
+						$meta_value = $form_entry_fields[ $element_id ]['value'];
+					} elseif ( isset( $submitted_data[ $element_id ] ) ) {
+						// fallback to submitted_data.
+						$meta_value = $submitted_data[ $element_id ];
 					}
-				}
+					forminator_addon_maybe_log( __METHOD__, $field_type, $meta_value );
 
-				// For choice fields, resolve labels/values based on the print_value setting.
-				// Use raw prepared data since $submitted_data has already been stringified.
-				if ( in_array( $field_type, array( 'select', 'radio', 'checkbox' ), true ) ) {
-					$form_value = forminator_replace_field_data( $module, $element_id, $raw_data, false, $print_value );
-				} else {
-					$form_value = Forminator_Form_Entry_Model::meta_value_to_string( $field_type, $meta_value, false, PHP_INT_MAX, $field );
-				}
+					if ( in_array( $field_type, array( 'paypal', 'stripe', 'stripe-ocs' ), true ) ) {
+						if ( isset( $meta_value['amount'] ) ) {
+							$meta_value['amount'] = Forminator_Field::get_formatted_amount( $field, $meta_value, $module );
+						}
+					}
 
-				// Replace custom_option with actual custom value.
-				if ( false !== strpos( $form_value, 'custom_option' ) && isset( $submitted_data[ 'custom-' . $element_id ] ) ) {
-					$form_value = str_replace( 'custom_option', $submitted_data[ 'custom-' . $element_id ], $form_value );
+					// For choice fields, resolve labels/values based on the print_value setting.
+					// Use raw prepared data since $submitted_data has already been stringified.
+					if ( in_array( $field_type, array( 'select', 'radio', 'checkbox' ), true ) ) {
+						$form_value = forminator_replace_field_data( $module, $element_id, $raw_data, false, $print_value );
+					} else {
+						$form_value = Forminator_Form_Entry_Model::meta_value_to_string( $field_type, $meta_value, false, PHP_INT_MAX, $field );
+					}
+
+					// Replace custom_option with actual custom value.
+					if ( false !== strpos( $form_value, 'custom_option' ) && isset( $submitted_data[ 'custom-' . $element_id ] ) ) {
+						$form_value = str_replace( 'custom_option', $submitted_data[ 'custom-' . $element_id ], $form_value );
+					}
 				}
 
 				$value     = new ForminatorGoogleAddon\Google\Service\Sheets\ExtendedValue();

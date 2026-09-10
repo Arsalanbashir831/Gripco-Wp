@@ -13,7 +13,9 @@ $table_prefix = getenv('WORDPRESS_TABLE_PREFIX') ?: 'wp_an4rpmm56b_';
 define('WP_HOME', rtrim(getenv('WP_HOME') ?: 'https://gripcosaudia.com', '/'));
 define('WP_SITEURL', rtrim(getenv('WP_SITEURL') ?: 'https://gripcosaudia.com', '/'));
 define('WP_ENVIRONMENT_TYPE', getenv('WP_ENVIRONMENT_TYPE') ?: 'production');
-define('WP_CACHE', true);
+// Temporarily bypass the stale Airlift page cache while Elementor styles are
+// rebuilt. Re-enable only after a clean cache warm-up has been verified.
+define('WP_CACHE', false);
 define('WP_MEMORY_LIMIT', '256M');
 define('WP_MAX_MEMORY_LIMIT', '512M');
 
@@ -24,6 +26,7 @@ if (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strpos($_SERVER['HTTP_X_FORWARD
 
 define('FORCE_SSL_ADMIN', true);
 define('DISALLOW_FILE_EDIT', true);
+define('DISALLOW_UNFILTERED_HTML', true);
 define('WP_AUTO_UPDATE_CORE', 'minor');
 
 define('AUTH_KEY',         getenv('WP_AUTH_KEY') ?: 'change-me');

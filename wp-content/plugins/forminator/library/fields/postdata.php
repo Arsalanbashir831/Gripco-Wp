@@ -417,7 +417,7 @@ class Forminator_Postdata extends Forminator_Field {
 
 			$html .= '<div class="forminator-row">';
 
-				$html .= sprintf( '<div class="forminator-col forminator-col-%s">', $cols );
+				$html .= sprintf( '<div class="forminator-col forminator-col-%s">', esc_attr( $cols ) );
 
 					$html .= '<div class="forminator-field">';
 
@@ -529,13 +529,13 @@ class Forminator_Postdata extends Forminator_Field {
 						$selected_class = esc_attr( 'forminator-option' );
 					}
 
-					$html .= sprintf( '<label for="%s" class="%s">', $input_id, $selected_class );
+					$html .= sprintf( '<label for="%s" class="%s">', esc_attr( $input_id ), $selected_class );
 
 					$html .= sprintf(
 						'<input type="checkbox" name="%s" value="%s" id="%s" %s />',
-						$name,
-						$value,
-						$input_id,
+						esc_attr( $name ),
+						esc_attr( $value ),
+						esc_attr( $input_id ),
 						$selected
 					);
 
@@ -671,6 +671,11 @@ class Forminator_Postdata extends Forminator_Field {
 		$image         = isset( $data['post-image'] ) ? $data['post-image'] : '';
 		$category_list = forminator_post_categories( $post_type );
 
+		$post_title_label   = self::get_property( 'post_title_label', $field, '' );
+		$post_content_label = self::get_property( 'post_content_label', $field, '' );
+		$post_excerpt_label = self::get_property( 'post_excerpt_label', $field, '' );
+		$post_image_label   = self::get_property( 'post_image_label', $field, '' );
+
 		if ( $this->is_required( $field ) ) {
 			if ( empty( $data ) ) {
 				$postdata_validation_message     = apply_filters(
@@ -683,33 +688,37 @@ class Forminator_Postdata extends Forminator_Field {
 
 				if ( ! empty( $post_title ) && empty( $title ) ) {
 
-					$postdata_post_title_validation_message          = apply_filters(
+					$postdata_post_title_validation_message = apply_filters(
 						'forminator_postdata_field_post_title_validation_message',
-						( ! empty( $setting_required_message ) ? $setting_required_message : esc_html( self::$default_required_messages[ $this->type ] ) ),
+						/* Translators: 1. Post title label */
+						( ! empty( $setting_required_message ) ? $setting_required_message : sprintf( esc_html__( 'This field is required. Please enter the %s.', 'forminator' ), esc_html( $post_title_label ) ) ),
 						$id
 					);
 					$this->validation_message[ $id . '-post-title' ] = $postdata_post_title_validation_message;
 				}
 				if ( ! empty( $post_content ) && empty( $content ) ) {
-					$postdata_post_content_validation_message          = apply_filters(
+					$postdata_post_content_validation_message = apply_filters(
 						'forminator_postdata_field_post_content_validation_message',
-						( ! empty( $setting_required_message ) ? $setting_required_message : esc_html__( 'This field is required. Please enter the post content.', 'forminator' ) ),
+						/* Translators: 1. Post content label */
+						( ! empty( $setting_required_message ) ? $setting_required_message : sprintf( esc_html__( 'This field is required. Please enter the %s.', 'forminator' ), esc_html( $post_content_label ) ) ),
 						$id
 					);
 					$this->validation_message[ $id . '-post-content' ] = $postdata_post_content_validation_message;
 				}
 				if ( ! empty( $post_excerpt ) && empty( $excerpt ) ) {
-					$postdata_post_excerpt_validation_message          = apply_filters(
+					$postdata_post_excerpt_validation_message = apply_filters(
 						'forminator_postdata_field_post_excerpt_validation_message',
-						( ! empty( $setting_required_message ) ? $setting_required_message : esc_html__( 'This field is required. Please enter the post excerpt.', 'forminator' ) ),
+						/* Translators: 1. Post excerpt label */
+						( ! empty( $setting_required_message ) ? $setting_required_message : sprintf( esc_html__( 'This field is required. Please enter the %s.', 'forminator' ), esc_html( $post_excerpt_label ) ) ),
 						$id
 					);
 					$this->validation_message[ $id . '-post-excerpt' ] = $postdata_post_excerpt_validation_message;
 				}
 				if ( ! empty( $post_image ) && empty( $image ) ) {
-					$postdata_post_image_validation_message          = apply_filters(
+					$postdata_post_image_validation_message = apply_filters(
 						'forminator_postdata_field_post_image_validation_message',
-						( ! empty( $setting_required_message ) ? $setting_required_message : esc_html__( 'This field is required. Please upload a post image.', 'forminator' ) ),
+						/* Translators: 1. Post image label */
+						( ! empty( $setting_required_message ) ? $setting_required_message : sprintf( esc_html__( 'This field is required. Please upload a %s.', 'forminator' ), esc_html( $post_image_label ) ) ),
 						$id
 					);
 					$this->validation_message[ $id . '-post-image' ] = $postdata_post_image_validation_message;
@@ -751,7 +760,7 @@ class Forminator_Postdata extends Forminator_Field {
 							$this->validation_message[ $id . '-post-title' ] = apply_filters(
 								// nr = not required.
 								'forminator_postdata_field_post_title_nr_validation_message',
-								esc_html__( 'At least one of these fields is required: Post Title, Post Excerpt or Post Content.', 'forminator' ),
+								$this->get_default_error_message( $field ),
 								$id
 							);
 						}
@@ -759,7 +768,7 @@ class Forminator_Postdata extends Forminator_Field {
 							$this->validation_message[ $id . '-post-content' ] = apply_filters(
 								// nr = not required.
 								'forminator_postdata_field_post_content_nr_validation_message',
-								esc_html__( 'At least one of these fields is required: Post Title, Post Excerpt or Post Content.', 'forminator' ),
+								$this->get_default_error_message( $field ),
 								$id
 							);
 						}
@@ -767,7 +776,7 @@ class Forminator_Postdata extends Forminator_Field {
 							$this->validation_message[ $id . '-post-excerpt' ] = apply_filters(
 								// nr = not required.
 								'forminator_postdata_field_post_excerpt_nr_validation_message',
-								esc_html__( 'At least one of these fields is required: Post Title, Post Excerpt or Post Content.', 'forminator' ),
+								$this->get_default_error_message( $field ),
 								$id
 							);
 						}
@@ -789,6 +798,43 @@ class Forminator_Postdata extends Forminator_Field {
 					}
 				}
 			}
+		}
+	}
+
+	/**
+	 * Get default error message.
+	 *
+	 * @param array $field Field data.
+	 * @return string
+	 */
+	private function get_default_error_message( $field ) {
+		$post_title_label     = self::get_property( 'post_title_label', $field, '' );
+		$post_content_label   = self::get_property( 'post_content_label', $field, '' );
+		$post_excerpt_label   = self::get_property( 'post_excerpt_label', $field, '' );
+		$post_title_enabled   = self::get_property( 'post_title', $field, false );
+		$post_content_enabled = self::get_property( 'post_content', $field, false );
+		$post_excerpt_enabled = self::get_property( 'post_excerpt', $field, false );
+		if ( $post_title_enabled && $post_content_enabled && $post_excerpt_enabled ) {
+			/* Translators: 1. Post title label, 2. Post excerpt label, 3. Post content label. */
+			return sprintf( esc_html__( 'At least one of these fields is required: %1$s, %2$s or %3$s.', 'forminator' ), esc_html( $post_title_label ), esc_html( $post_excerpt_label ), esc_html( $post_content_label ) );
+		} elseif ( $post_title_enabled && $post_content_enabled ) {
+			/* Translators: 1. Post title label, 2. Post content label. */
+			return sprintf( esc_html__( 'At least one of these fields is required: %1$s or %2$s.', 'forminator' ), esc_html( $post_title_label ), esc_html( $post_content_label ) );
+		} elseif ( $post_title_enabled && $post_excerpt_enabled ) {
+			/* Translators: 1. Post title label, 2. Post excerpt label. */
+			return sprintf( esc_html__( 'At least one of these fields is required: %1$s or %2$s.', 'forminator' ), esc_html( $post_title_label ), esc_html( $post_excerpt_label ) );
+		} elseif ( $post_content_enabled && $post_excerpt_enabled ) {
+			/* Translators: 1. Post content label, 2. Post excerpt label. */
+			return sprintf( esc_html__( 'At least one of these fields is required: %1$s or %2$s.', 'forminator' ), esc_html( $post_content_label ), esc_html( $post_excerpt_label ) );
+		} elseif ( $post_title_enabled ) {
+			/* Translators: 1. Post title label */
+			return sprintf( esc_html__( 'This field is required. Please enter the %s.', 'forminator' ), esc_html( $post_title_label ) );
+		} elseif ( $post_content_enabled ) {
+			/* Translators: 1. Post content label */
+			return sprintf( esc_html__( 'This field is required. Please enter the %s.', 'forminator' ), esc_html( $post_content_label ) );
+		} else {
+			/* Translators: 1. Post excerpt label */
+			return sprintf( esc_html__( 'This field is required. Please enter the %s.', 'forminator' ), esc_html( $post_excerpt_label ) );
 		}
 	}
 
@@ -1023,9 +1069,12 @@ class Forminator_Postdata extends Forminator_Field {
 			$image = $data['post-image'];
 		}
 
-		// Do not sanitize post content.
+		// Sanitize post content while preserving supported rich textarea hooks.
 		if ( isset( $data['post-content'] ) ) {
-			$content = wp_kses_post( $data['post-content'] );
+			$content = forminator_sanitize_rich_textarea_widget_hooks( $data['post-content'] );
+
+			// Balance tags to ensure that user-added HTML tags are properly closed.
+			$content = force_balance_tags( $content );
 		}
 
 		// Sanitize.
@@ -1109,17 +1158,23 @@ class Forminator_Postdata extends Forminator_Field {
 		$post_image_enabled   = ! empty( $post_image );
 		$category_list        = forminator_post_categories( $post_type );
 
+		$post_title_label   = self::get_property( 'post_title_label', $field, '' );
+		$post_content_label = self::get_property( 'post_content_label', $field, '' );
+		$post_excerpt_label = self::get_property( 'post_excerpt_label', $field, '' );
+		$post_image_label   = self::get_property( 'post_image_label', $field, '' );
+
 		if ( $is_required ) {
 			if ( $post_title_enabled ) {
 				$messages .= '"' . $id . '-post-title": {' . "\n";
 
 				$required_message = apply_filters(
 					'forminator_postdata_field_post_title_validation_message',
-					( ! empty( $setting_required_message ) ? $setting_required_message : self::$default_required_messages[ $this->type ] ),
+					/* Translators: 1. Post title label */
+					( ! empty( $setting_required_message ) ? $setting_required_message : sprintf( esc_html__( 'This field is required. Please enter the %s.', 'forminator' ), esc_html( $post_title_label ) ) ),
 					$id,
 					$field
 				);
-				$messages         = $messages . '"required": "' . forminator_addcslashes( $required_message ) . '",' . "\n";
+				$messages = $messages . '"required": "' . forminator_addcslashes( $required_message ) . '",' . "\n";
 
 				$messages .= '},' . "\n";
 			}
@@ -1128,11 +1183,12 @@ class Forminator_Postdata extends Forminator_Field {
 
 				$required_message = apply_filters(
 					'forminator_postdata_field_post_content_validation_message',
-					( ! empty( $setting_required_message ) ? $setting_required_message : esc_html__( 'This field is required. Please enter the post content.', 'forminator' ) ),
+					/* Translators: 1. Post content label */
+					( ! empty( $setting_required_message ) ? $setting_required_message : sprintf( esc_html__( 'This field is required. Please enter the %s.', 'forminator' ), esc_html( $post_content_label ) ) ),
 					$id,
 					$field
 				);
-				$messages         = $messages . '"required": "' . forminator_addcslashes( $required_message ) . '",' . "\n";
+				$messages = $messages . '"required": "' . forminator_addcslashes( $required_message ) . '",' . "\n";
 
 				$messages .= '},' . "\n";
 			}
@@ -1141,11 +1197,12 @@ class Forminator_Postdata extends Forminator_Field {
 
 				$required_message = apply_filters(
 					'forminator_postdata_field_post_excerpt_validation_message',
-					( ! empty( $setting_required_message ) ? $setting_required_message : esc_html__( 'This field is required. Please enter the post excerpt.', 'forminator' ) ),
+					/* Translators: 1. Post excerpt label */
+					( ! empty( $setting_required_message ) ? $setting_required_message : sprintf( esc_html__( 'This field is required. Please enter the %s.', 'forminator' ), esc_html( $post_excerpt_label ) ) ),
 					$id,
 					$field
 				);
-				$messages         = $messages . '"required": "' . forminator_addcslashes( $required_message ) . '",' . "\n";
+				$messages = $messages . '"required": "' . forminator_addcslashes( $required_message ) . '",' . "\n";
 
 				$messages .= '},' . "\n";
 			}
@@ -1154,11 +1211,12 @@ class Forminator_Postdata extends Forminator_Field {
 
 				$required_message = apply_filters(
 					'forminator_postdata_field_post_image_validation_message',
-					( ! empty( $setting_required_message ) ? $setting_required_message : esc_html__( 'This field is required. Please upload a post image.', 'forminator' ) ),
+					/* Translators: 1. Post image label */
+					( ! empty( $setting_required_message ) ? $setting_required_message : sprintf( esc_html__( 'This field is required. Please upload a %s.', 'forminator' ), esc_html( $post_image_label ) ) ),
 					$id,
 					$field
 				);
-				$messages         = $messages . '"required": "' . forminator_addcslashes( $required_message ) . '",' . "\n";
+				$messages = $messages . '"required": "' . forminator_addcslashes( $required_message ) . '",' . "\n";
 
 				$messages .= '},' . "\n";
 			}

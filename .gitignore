@@ -28,6 +28,7 @@
 /wp-content/maintenance.php
 
 # Hosting, migration, and backup artifacts
+/.quarantine/
 /*.tar
 /*.tar.*
 /*.tar_bv_*

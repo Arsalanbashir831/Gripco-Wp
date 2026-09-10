@@ -63,7 +63,6 @@ class Forminator_Poll_Front extends Forminator_Render_Form {
 		$assets->enqueue_styles( $this );
 		$assets->enqueue_scripts();
 		$assets->load_module_css( true );
-		wp_enqueue_script( 'google-charts', 'https://www.gstatic.com/charts/loader.js', array( 'jquery' ), '1.0', false );
 		$this->set_breakdance_preview_style_handles( $before_style_handles );
 	}
 	/**
@@ -118,8 +117,6 @@ class Forminator_Poll_Front extends Forminator_Render_Form {
 			$this->generate_render_id( $id );
 			$this->get_form_placeholder( esc_attr( $id ), true );
 
-			wp_enqueue_script( 'google-charts', 'https://www.gstatic.com/charts/loader.js', array( 'jquery' ), '1.0', false );
-
 			return;
 		}
 
@@ -137,8 +134,6 @@ class Forminator_Poll_Front extends Forminator_Render_Form {
 			if ( is_admin() || $is_preview ) {
 				$this->print_styles();
 			}
-
-			wp_enqueue_script( 'google-charts', 'https://www.gstatic.com/charts/loader.js', array( 'jquery' ), '1.0', false );
 
 			add_action( 'wp_footer', array( $this, 'forminator_render_front_scripts' ), 9999 );
 			add_action( 'wp_footer', array( $this, 'graph_scripts' ), 100 );
@@ -915,6 +910,45 @@ class Forminator_Poll_Front extends Forminator_Render_Form {
 	}
 
 	/**
+	 * Whether the poll results view should scroll into focus.
+	 *
+	 * Page-reload submission only; AJAX results are handled client-side.
+	 *
+	 * @return bool
+	 */
+	private function should_focus_poll_results() {
+		$poll_id = (int) $this->model->id;
+		$form_id = filter_input( INPUT_GET, 'form_id', FILTER_VALIDATE_INT );
+		$saved   = filter_input( INPUT_GET, 'saved', FILTER_VALIDATE_BOOLEAN );
+		$results = filter_input( INPUT_GET, 'results', FILTER_VALIDATE_BOOLEAN );
+
+		if ( $poll_id === (int) $form_id && ( $saved || $results ) ) {
+			return true;
+		}
+
+		$referrer = wp_get_referer();
+		if ( ! $referrer ) {
+			return false;
+		}
+
+		$query_string = wp_parse_url( $referrer, PHP_URL_QUERY );
+		if ( empty( $query_string ) ) {
+			return false;
+		}
+
+		parse_str( $query_string, $query_vars );
+
+		if ( empty( $query_vars['form_id'] ) || $poll_id !== (int) $query_vars['form_id'] ) {
+			return false;
+		}
+
+		$referrer_saved   = ! empty( $query_vars['saved'] ) ? filter_var( $query_vars['saved'], FILTER_VALIDATE_BOOLEAN ) : false;
+		$referrer_results = ! empty( $query_vars['results'] ) ? filter_var( $query_vars['results'], FILTER_VALIDATE_BOOLEAN ) : false;
+
+		return $referrer_saved || $referrer_results;
+	}
+
+	/**
 	 * Render success
 	 *
 	 * @param bool  $render Render.
@@ -934,15 +968,16 @@ class Forminator_Poll_Front extends Forminator_Render_Form {
 
 		if ( is_object( $this->model ) ) {
 
-			$post_id         = $this->get_post_id();
-			$return_url      = get_permalink( $post_id );
-			$chart_container = 'forminator_chart_poll_' . uniqid() . '_' . $this->model->id;
+			$post_id           = $this->get_post_id();
+			$return_url        = get_permalink( $post_id );
+			$chart_container   = 'forminator_chart_poll_' . uniqid() . '_' . $this->model->id;
+			$should_focus_poll = $this->should_focus_poll_results() ? 'forminator-poll--should-focus-poll' : '';
 
 			ob_start();
 			?>
 
 			<form id="forminator-module-<?php echo esc_attr( $this->model->id ); ?>"
-				class="forminator-ui forminator-poll forminator-poll-<?php echo esc_attr( $this->model->id ); ?> <?php echo esc_attr( $this->get_form_design_class() ); ?> <?php echo esc_attr( $this->get_fields_type_class() ); ?> <?php echo esc_attr( $this->form_extra_classes() ); ?>"
+				class="forminator-ui forminator-poll forminator-poll-<?php echo esc_attr( $this->model->id ); ?> <?php echo esc_attr( $this->get_form_design_class() ); ?> <?php echo esc_attr( $this->get_fields_type_class() ); ?> <?php echo esc_attr( $this->form_extra_classes() ); ?> <?php echo esc_attr( $should_focus_poll ); ?>"
 				method="GET"
 				action="<?php echo esc_url( $return_url ); ?>"
 				data-forminator-render="<?php echo esc_attr( self::$render_ids[ $this->model->id ] ); ?>"
@@ -1138,6 +1173,10 @@ class Forminator_Poll_Front extends Forminator_Render_Form {
 			$chart_design = $form_settings['results-style'];
 		}
 
+		if ( ! in_array( $chart_design, array( 'bar', 'pie' ), true ) ) {
+			$chart_design = 'bar';
+		}
+
 		$number_votes_enabled = (bool) false;
 
 		if ( isset( $form_settings['show-votes-count'] ) && $form_settings['show-votes-count'] ) {
@@ -1175,29 +1214,32 @@ class Forminator_Poll_Front extends Forminator_Render_Form {
 				$(function() {
 
 					var chartExtras = [
-						'<?php echo esc_html_e( 'vote(s)', 'forminator' ); ?>',
-						<?php echo esc_html( $votes_count ); ?>,
+						<?php echo wp_json_encode( esc_html__( 'vote(s)', 'forminator' ) ); ?>,
+						<?php echo wp_json_encode( filter_var( $votes_count, FILTER_VALIDATE_BOOLEAN ) ); ?>,
 						[
-							'<?php echo esc_html( $grids_color ); ?>',
-							'<?php echo esc_html( $labels_color ); ?>',
-							'<?php echo esc_html( $onchart_label ); ?>'
+							<?php echo wp_json_encode( $grids_color ); ?>,
+							<?php echo wp_json_encode( $labels_color ); ?>,
+							<?php echo wp_json_encode( $onchart_label ); ?>
 						],
 						[
-							'<?php echo esc_html( $tooltips_bg ); ?>',
-							'<?php echo esc_html( $tooltips_color ); ?>'
+							<?php echo wp_json_encode( $tooltips_bg ); ?>,
+							<?php echo wp_json_encode( $tooltips_color ); ?>
 						]
 					];
 
 					FUI.pollChart(
 						'#<?php echo esc_attr( $container_id ); ?>',
 						<?php echo wp_json_encode( $chart_data ); ?>,
-						'<?php echo esc_html( $chart_design ); ?>',
+						<?php echo wp_json_encode( $chart_design ); ?>,
 						chartExtras
 					);
 
 					var chartCanvas  = $( '#<?php echo esc_attr( $container_id ); ?>' ),
 						chartBody    = chartCanvas.closest( '.forminator-poll-body' ),
-						chartWrapper = chartBody.find( '.forminator-chart-wrapper' )
+						chartWrapper = chartBody.find( '.forminator-chart-wrapper' ),
+						form         = chartCanvas.closest( 'form' ),
+						isInWidget   = form.parent().hasClass( 'widget_forminator_widget' ),
+						shouldFocus  = ! isInWidget && form.hasClass( 'forminator-poll--should-focus-poll' )
 						;
 
 					if ( chartWrapper.length ) {
@@ -1207,13 +1249,21 @@ class Forminator_Poll_Front extends Forminator_Render_Form {
 						chartWrapper.addClass( 'forminator-show' );
 						chartWrapper.removeAttr( 'aria-hidden' );
 
-						// If poll is added to sidebar widget, let's not add auto-scroll.
-						if ( ! chartWrapper.parents( 'form' ).parent().hasClass( 'widget_forminator_widget' ) ) {
+						if ( shouldFocus ) {
 							chartWrapper.attr( 'tabindex', '-1' );
+							chartWrapper.focus();
 						}
 
-						chartWrapper.focus();
+					} else {
 
+						// Bar chart: FUI.pollChart does not wrap the canvas (pie only).
+						chartCanvas.addClass( 'forminator-show' );
+						chartCanvas.removeAttr( 'aria-hidden' );
+
+						if ( shouldFocus ) {
+							chartCanvas.attr( 'tabindex', '-1' );
+							chartCanvas.focus();
+						}
 					}
 
 				});
@@ -1260,21 +1310,25 @@ class Forminator_Poll_Front extends Forminator_Render_Form {
 	 *
 	 * @since 1.6.1
 	 *
-	 * @param bool $hide Hide.
-	 * @param bool $is_preview Is preview.
+	 * @param bool     $hide Hide.
+	 * @param bool     $is_preview Is preview.
+	 * @param int|null $render_id Render ID.
 	 *
 	 * @return false|string
 	 */
-	public function get_html( $hide = true, $is_preview = false ) {
+	public function get_html( $hide = true, $is_preview = false, $render_id = null ) {
 		ob_start();
 
 		$is_same_form   = false;
 		$is_same_render = false;
 		$rendered       = false;
 		$form_id        = Forminator_Core::sanitize_text_field( 'form_id' );
-		$render_id      = Forminator_Core::sanitize_text_field( 'render_id' );
 		$saved          = Forminator_Core::sanitize_text_field( 'saved' );
 		$results        = Forminator_Core::sanitize_text_field( 'results' );
+		if ( null === $render_id ) {
+			$render_id = Forminator_Core::sanitize_text_field( 'render_id' );
+		}
+
 		if ( (int) $form_id === (int) $this->model->id ) {
 			$is_same_form = true;
 		}
@@ -1283,11 +1337,12 @@ class Forminator_Poll_Front extends Forminator_Render_Form {
 			$is_same_render = true;
 		}
 
-		$status_info = $this->model->opening_status();
+		$current_render_id = isset( self::$render_ids[ $this->model->id ] ) ? (int) self::$render_ids[ $this->model->id ] : 0;
+		$status_info       = $this->model->opening_status();
 
 		if ( 'open' !== $status_info['status'] ) {
 			$this->track_views = false;
-			$this->render( $this->model->id, $hide, $is_preview );
+			$this->render( $this->model->id, $hide, $is_preview, $current_render_id );
 			$rendered = true;
 		} elseif ( $saved && $is_same_form && $is_same_render && $this->show_results() ) {
 				$this->track_views = false;
@@ -1299,7 +1354,7 @@ class Forminator_Poll_Front extends Forminator_Render_Form {
 			$this->track_views = false;
 			$this->render_success();
 		} else {
-			$this->render( $this->model->id, $hide, $is_preview );
+			$this->render( $this->model->id, $hide, $is_preview, $current_render_id );
 
 			$rendered = true;
 		}

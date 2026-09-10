@@ -756,7 +756,7 @@ class Forminator_QForm_Front extends Forminator_Render_Form {
 		<?php
 		$intro = ob_get_clean();
 
-		if ( ! empty( $this->model->settings['pagination'] ) ) {
+		if ( ! empty( $this->model->settings['pagination'] ) && ! empty( $this->get_fields() ) ) {
 			$start_text = $this->get_start_button_text();
 			$html       = '<div class="forminator-quiz-intro">' . $intro;
 			if ( ! $this->has_lead() || 'beginning' !== $this->get_form_placement() ) {
@@ -830,7 +830,7 @@ class Forminator_QForm_Front extends Forminator_Render_Form {
 
 		$submit_data  = $this->get_submit_data();
 		$settings     = $this->model->settings ?? array();
-		$pagination   = ! empty( $settings['pagination'] );
+		$pagination   = ! empty( $settings['pagination'] ) && self::$steps_count > 0;
 		$result_behav = $settings['results_behav'] ?? '';
 		$lead_result  = 'beginning' === $this->get_form_placement() ? $result_behav : 'end';
 		$current_url  = $this->is_ajax_load( $this->is_preview ) && isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : forminator_get_current_url();
@@ -1053,15 +1053,16 @@ class Forminator_QForm_Front extends Forminator_Render_Form {
 	 *
 	 * @param bool $hide Hide.
 	 * @param bool $is_preview Is preview.
+	 * @param int  $render_id Render ID.
 	 *
 	 * @return false|string
 	 */
-	public function get_html( $hide = true, $is_preview = false ) {
+	public function get_html( $hide = true, $is_preview = false, $render_id = 0 ) {
 		ob_start();
 
 		$id = $this->get_module_id();
 
-		$this->render( $id, $hide, $is_preview );
+		$this->render( $id, $hide, $is_preview, $render_id );
 
 		$this->set_forms_properties();
 
@@ -1204,6 +1205,9 @@ class Forminator_QForm_Front extends Forminator_Render_Form {
 		}
 		if ( ! empty( $form_properties['settings']['text-previous'] ) ) {
 			$options['text_prev'] = $form_properties['settings']['text-previous'];
+		}
+		if ( ! empty( $form_properties['settings']['text-view-results'] ) ) {
+			$options['text_view_results'] = sanitize_text_field( $form_properties['settings']['text-view-results'] );
 		}
 		if ( ! empty( $form_properties['settings']['submitData']['custom-class'] ) ) {
 			$options['submit_class'] = $form_properties['settings']['submitData']['custom-class'];

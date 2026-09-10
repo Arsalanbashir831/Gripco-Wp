@@ -77,16 +77,14 @@
 		addCountryCode: function( form ) {
 			form.find('.forminator-field--phone').each(function() {
 				var phone_element = $(this),
-					national_mode = phone_element.data('national_mode') === 'enabled',
-				    iti           = intlTelInput.getInstance(this);
+					currentInput  = phone_element.val();
 
-				if ( !national_mode && iti ) {
-					var dialCode = '+' + iti.getSelectedCountryData().dialCode;
-					var currentInput = phone_element.val();
-					if (currentInput !== '' && !currentInput.trim().startsWith('+')) {
+				if ( currentInput !== '' && ! currentInput.trim().startsWith( '+' ) ) {
+					var dialCode = forminatorUtils().get_phone_dial_code( phone_element );
+					if ( dialCode ) {
 						phone_element.closest('.iti').find('.iti__selected-dial-code').hide();
 						phone_element.css('padding-inline-start', '45px');
-						phone_element.val(dialCode + ' ' + currentInput);
+						phone_element.val( '+' + dialCode + ' ' + currentInput );
 					}
 				}
 			});
@@ -100,6 +98,16 @@
 			if (success_available.length) {
 				self.focus_to_element(self.$el.find('.forminator-response-message'));
 			}
+			self.$el.on('forminator:stripe:return:ready', function() {
+				if ( self.$el.data('forminatorStripeReturnSubmitting') ) {
+					return;
+				}
+
+				self.$el.data('forminatorStripeReturnSubmitting', true);
+				window.setTimeout(function() {
+					self.$el.trigger('submit.frontSubmit', 'forminator:submit:stripe:return');
+				}, 200);
+			});
 			$('.def-ajaxloader').hide();
 			var isSent = false;
 			$('body').on('click', '#lostPhone', function (e) {
@@ -366,6 +374,13 @@
 									authField.find('.lost-device-url').attr('href', data.data.lost_url);
 
 									if( 'show' === data.data.authentication ) {
+										if (
+											'undefined' !== typeof window.webauthn &&
+											'undefined' !== typeof data.data.username
+										) {
+											window.webauthn.username = data.data.username;
+										}
+
 										self.$el.find('.forminator-authentication-nav').html('').append( data.data.auth_nav );
 										self.$el.find('.forminator-authentication-box').hide();
 										if ( 'fallback-email' === data.data.auth_method ) {
@@ -373,6 +388,7 @@
 											self.$el.find('.notification').hide();
 										}
 										self.$el.find( '#forminator-2fa-' + data.data.auth_method ).show();
+										self.$el.find( '#forminator-2fa-' + data.data.auth_method + ' .option-row' ).attr( 'tabindex', '0' ).attr( 'role', 'button' );
 										self.$el.find('.forminator-authentication-box input').attr( 'disabled', true );
 										self.$el.find( '#forminator-2fa-' + data.data.auth_method + ' input' ).attr( 'disabled', false );
 										self.$el.find('.forminator-2fa-link').show();
@@ -970,18 +986,31 @@
 						$captcha_field.addClass("error");
 					}
 
-					$target_message.removeAttr("aria-hidden").html('<label class="forminator-label--error forminator-invalid-captcha"><span>' + window.ForminatorFront.cform.captcha_error + '</span></label>');
+					var pagination    = self.$el.data( 'forminatorFrontPagination' ),
+						$captcha_page = $captcha_field.closest( '.forminator-pagination' ),
+						captcha_step  = $captcha_page.data( 'step' ),
+						navigated     = pagination && typeof pagination.go_to === 'function' &&
+							typeof captcha_step !== 'undefined' && captcha_step !== pagination.step;
 
-					if ( ! self.settings.inline_validation ) {
-						self.focus_to_element($target_message);
+					if ( navigated ) {
+						self.disable_form_submit( self, false );
+						pagination.go_to( captcha_step, true );
+						pagination.update_buttons();
+						$target_message.html( '' )
+							.removeClass( 'forminator-loading forminator-show forminator-error forminator-success forminator-accessible' )
+							.removeAttr( 'tabindex' ).attr( 'aria-hidden', true );
 					} else {
+						$target_message.removeAttr("aria-hidden").html('<label class="forminator-label--error forminator-invalid-captcha"><span>' + window.ForminatorFront.cform.captcha_error + '</span></label>');
+					}
 
+					if ( navigated || self.settings.inline_validation ) {
 						if ( ! $captcha_parent.hasClass( 'forminator-has_error' ) && $captcha_field.data( 'size' ) !== 'invisible' ) {
 							$captcha_parent.addClass( 'forminator-has_error' )
 								.append( '<span class="forminator-error-message forminator-invalid-captcha" aria-hidden="true">' + window.ForminatorFront.cform.captcha_error + '</span>' );
 							self.focus_to_element( $captcha_parent );
 						}
-
+					} else {
+						self.focus_to_element($target_message);
 					}
 
 					return false;

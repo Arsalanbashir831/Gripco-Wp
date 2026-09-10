@@ -604,18 +604,43 @@ abstract class Forminator_Field {
 			$wp_editor_class .= ' do-validate';
 		}
 
+		$settings = array(
+			'textarea_name' => isset( $attr['name'] ) ? $attr['name'] : '',
+			'media_buttons' => $media_buttons,
+			'editor_class'  => $wp_editor_class,
+			'editor_height' => $default_height,
+		);
+
+		if ( did_action( 'elementor/loaded' ) ) {
+			// Disable TinyMCE and Quicktags in Elementor to prevent console errors when wp.editor.initialize is triggered.
+			$settings['tinymce']       = false;
+			$settings['quicktags']     = false;
+			$settings['media_buttons'] = false;
+		}
+
 		ob_start();
 		wp_editor(
 			$content,
 			$editor_id,
-			array(
-				'textarea_name' => isset( $attr['name'] ) ? $attr['name'] : '',
-				'media_buttons' => $media_buttons,
-				'editor_class'  => $wp_editor_class,
-				'editor_height' => $default_height,
-			)
+			$settings
 		);
-
+		if ( did_action( 'elementor/loaded' ) ) {
+			// Ensure the editor script is loaded; otherwise, wp.editor.initialize will not function in the Elementor popup.
+			Forminator_CForm_Front::$load_wp_enqueue_editor = true;
+			$args = self::get_tinymce_args( $editor_id, $media_buttons );
+			?>
+			<script>
+				jQuery(function() {
+					setTimeout(() => {
+						<?php
+						// Initialize the editor when the textarea is visible in the DOM, as we created the editor without TinyMCE and Quicktags, so we need to initialize it manually.
+						?>
+						forminator_init_wp_editor_on_visible( "<?php echo esc_attr( $editor_id ); ?>", <?php echo wp_kses_post( $args ); ?>, true );
+					}, 10); /* Small delay to ensure the textarea is rendered in the DOM. */
+				});
+			</script>
+			<?php
+		}
 		$html .= ob_get_clean();
 
 		if ( 'above' !== self::$description_position ) {
@@ -1285,7 +1310,8 @@ abstract class Forminator_Field {
 		// }.
 
 		$element_id = $condition['element_id'];
-		if ( stripos( $element_id, 'upload-' ) !== false ) {
+		if ( stripos( $element_id, 'upload-' ) !== false && is_array( $form_field_value ) ) {
+			// Treat unfilled uploads as empty strings so blank "is not" conditions stay unmatched.
 			// Single file upload type.
 			if ( ! empty( $form_field_value['file']['name'] ) ) {
 				$form_field_value = $form_field_value['file']['name'];
@@ -1297,7 +1323,9 @@ abstract class Forminator_Field {
 						$file_names[] = $file['file_name'];
 					}
 				}
-				$form_field_value = $file_names;
+				$form_field_value = empty( $file_names ) ? '' : $file_names;
+			} else {
+				$form_field_value = '';
 			}
 		}
 
@@ -1591,6 +1619,25 @@ abstract class Forminator_Field {
 	 */
 	public function sanitize_value( $value ) {
 		return htmlspecialchars( $value, ENT_COMPAT );
+	}
+
+	/**
+	 * Sanitize flat choice values to match front-end submission.
+	 *
+	 * @param mixed $data Field data.
+	 *
+	 * @return array|string
+	 */
+	protected function sanitize_choice_data( $data ) {
+		if ( is_array( $data ) ) {
+			foreach ( $data as $key => $value ) {
+				$data[ $key ] = forminator_normalize_choice_option_value( $value );
+			}
+
+			return $data;
+		}
+
+		return forminator_normalize_choice_option_value( $data );
 	}
 
 	/**
@@ -2153,7 +2200,7 @@ abstract class Forminator_Field {
 				paste_webkit_styles : 'font-weight font-style color',
 				preview_styles      : 'font-family font-size font-weight font-style text-decoration text-transform',
 				tabfocus_elements   : ':prev,:next',
-                plugins    : 'charmap,hr,media,paste,tabfocus,textcolor,fullscreen,wptextpattern,lists,wordpress,wpeditimage,wpgallery,link,wplink,wpdialogs,wpview'," // phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- false positive.
+				plugins    : 'charmap,hr,media,paste,tabfocus,textcolor,fullscreen,wptextpattern,lists,wordpress,wpeditimage,wpgallery,link,wplink,wpdialogs,wpview'," // phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- false positive.
 				. "
 				resize     : 'vertical',
 				menubar    : false,
@@ -2289,11 +2336,14 @@ abstract class Forminator_Field {
 		if ( is_wp_error( $upload_root ) || ! is_dir( $upload_root ) || ! wp_is_writable( $upload_root ) ) {
 			return;
 		}
-		// Make sure it was not called before WP init.
-		if ( function_exists( 'insert_with_markers' ) ) {
-			self::add_index_file( $upload_root );
-			self::add_htaccess_file( $upload_root );
+
+		// Load admin API on frontend requests so .htaccess is always created.
+		if ( ! function_exists( 'insert_with_markers' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/misc.php';
 		}
+
+		self::add_index_file( $upload_root );
+		self::add_htaccess_file( $upload_root );
 	}
 
 	/**
@@ -2521,6 +2571,59 @@ abstract class Forminator_Field {
 	public function get_richtext_editor_script( $id, $media_buttons = false ) {
 		$args            = self::get_tinymce_args( $id, $media_buttons );
 		$is_block_editor = filter_input( INPUT_POST, 'is_block_editor', FILTER_VALIDATE_BOOLEAN );
+		$initialize      = '( function initForminatorEditor() {
+            var editorId = "' . esc_attr( $id ) . '";
+            var textarea = document.getElementById( editorId );
+            var observer;
+            var editorConfig = ' . $args . ';
+
+            if ( editorConfig.tinymce && typeof editorConfig.tinymce === "object" ) {
+                var originalSetup = editorConfig.tinymce.setup;
+
+                editorConfig.tinymce.setup = function( editor ) {
+                    if ( typeof originalSetup === "function" ) originalSetup( editor );
+                    editor.on( "init", function() {
+                        var select = editor.selection && editor.selection.select;
+                        if ( typeof select !== "function" ) return;
+                        editor.selection.select = function() {
+                            try { return select.apply( this, arguments ); } catch ( error ) {
+                                // Work around a TinyMCE mode-switch race where bookmark restoration can target a stale selection node.
+                                if ( error && -1 !== String( error.message ).indexOf( "setBaseAndExtent" ) ) return;
+                                throw error;
+                            }
+                        };
+                    } );
+                };
+            }
+
+			if ( ! textarea ) {
+				return;
+			}
+
+			if ( typeof wp === "undefined" || ! wp.editor || typeof wp.editor.initialize !== "function" ) {
+				return;
+			}
+
+			function initializeEditor() {
+				if ( 0 === textarea.getClientRects().length ) {
+					return false;
+				}
+
+				if ( observer ) {
+					observer.disconnect();
+				}
+
+				wp.editor.initialize( editorId, editorConfig );
+				return true;
+			}
+
+			if ( initializeEditor() || typeof IntersectionObserver === "undefined" ) {
+				return;
+			}
+
+			observer = new IntersectionObserver( initializeEditor );
+			observer.observe( textarea );
+		} )();';
 		if ( $is_block_editor ) {
 			// Message to show when rich text editor preview is not available in Gutenberg block editor.
 			$message = '<div style="all: initial;"><div class="block-editor-warning"><div class="block-editor-warning__contents"><p class="block-editor-warning__message">'
@@ -2528,15 +2631,28 @@ abstract class Forminator_Field {
 						. '</p></div></div></div>';
 			$script  = '<script>
 				if ( typeof wp !== "undefined" && wp.editor && typeof wp.editor.initialize === "function" ) {
-					wp.editor.initialize("' . esc_attr( $id ) . '", ' . $args . ');
+					' . $initialize . '
 				} else {
 				 	let textElement = document.getElementById("' . esc_attr( $id ) . '");
 					if( textElement ) {
 						textElement.outerHTML = \'' . $message . '\';
 					}
 				}</script>';
+		} elseif ( did_action( 'elementor/loaded' ) ) {
+				$script = '<script>
+				(function ($, document) {
+					setTimeout(() => {
+						const editor = typeof tinymce !== "undefined" && tinymce.get( "' . esc_attr( $id ) . '" );
+						let textarea = document.getElementById("' . esc_attr( $id ) . '");
+						if ( textarea && ( textarea.offsetParent !== null || editor ) ) {
+							wp.editor.initialize("' . esc_attr( $id ) . '", ' . wp_kses_post( $args ) . ');
+						} else {
+							forminator_init_wp_editor_on_visible("' . esc_attr( $id ) . '", ' . wp_kses_post( $args ) . ');
+						}
+					}, 50);
+				})(jQuery, document);</script>';
 		} else {
-			$script = '<script>wp.editor.initialize("' . esc_attr( $id ) . '", ' . $args . ');</script>';
+			$script = '<script>' . $initialize . '</script>';
 		}
 		return $script;
 	}

@@ -49,6 +49,7 @@ class Forminator_Admin_Data {
 		$data['fieldsPro'] = forminator_get_pro_fields();
 
 		$data['default_required_messages'] = Forminator_Field::$default_required_messages;
+		$data['passwordStrengthMessages']  = Forminator_Password::get_strength_messages();
 
 		return $data;
 	}
@@ -128,11 +129,12 @@ class Forminator_Admin_Data {
 			'hasHCaptcha'                    => forminator_has_hcaptcha_settings(),
 			'hasTurnstile'                   => forminator_has_turnstile_settings(),
 			'loadCaptcha'                    => wp_create_nonce( 'forminator_load_captcha_settings' ),
-			'hasStripe'                      => forminator_has_stripe_connected(),
+			'stripeTestReady'                => forminator_is_stripe_mode_ready( 'test' ),
+			'stripeLiveReady'                => forminator_is_stripe_mode_ready( 'live' ),
 			'formNonce'                      => $this->get_nonce(),
 			'resetTrackingDataNonce'         => wp_create_nonce( 'forminator_reset_tracking_data' ),
 			'createNonce'                    => wp_create_nonce( 'forminator_create_module' ),
-			'previewNonce'                   => wp_create_nonce( 'forminator_load_module' ),
+			'previewNonce'                   => wp_create_nonce( 'forminator_load_module_preview' ),
 			'updateLivePreviewNonce'         => wp_create_nonce( 'forminator_update_live_preview' ),
 			'searchNonce'                    => wp_create_nonce( 'forminator_search_emails' ),
 			'gFontNonce'                     => wp_create_nonce( 'forminator_load_google_fonts' ),

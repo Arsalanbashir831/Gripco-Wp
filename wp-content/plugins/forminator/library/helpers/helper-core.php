@@ -299,7 +299,6 @@ function forminator_common_admin_enqueue_scripts( $is_new_page = false ) {
 		false
 	);
 	wp_enqueue_script( 'ace-editor', forminator_plugin_url() . 'assets/js/library/ace/ace.js', array( 'jquery' ), FORMINATOR_VERSION, false );
-	wp_enqueue_script( 'google-charts', 'https://www.gstatic.com/charts/loader.js', array( 'jquery' ), FORMINATOR_VERSION, false );
 
 	if ( function_exists( 'wp_enqueue_editor' ) ) {
 		wp_enqueue_editor();
@@ -487,24 +486,26 @@ function forminator_localize_data() {
 	$data = array(
 		'ajaxUrl' => forminator_ajax_url(),
 		'cform'   => array(
-			'processing'                => esc_html__( 'Submitting form, please wait', 'forminator' ),
-			'error'                     => esc_html__( 'An error occurred while processing the form. Please try again', 'forminator' ),
-			'upload_error'              => esc_html__( 'An upload error occurred while processing the form. Please try again', 'forminator' ),
-			'pagination_prev'           => esc_html__( 'Previous', 'forminator' ),
-			'pagination_next'           => esc_html__( 'Next', 'forminator' ),
-			'pagination_go'             => esc_html__( 'Submit', 'forminator' ),
-			'gateway'                   => array(
+			'processing'                     => esc_html__( 'Submitting form, please wait', 'forminator' ),
+			'error'                          => esc_html__( 'An error occurred while processing the form. Please try again', 'forminator' ),
+			'upload_error'                   => esc_html__( 'An upload error occurred while processing the form. Please try again', 'forminator' ),
+			'pagination_prev'                => esc_html__( 'Previous', 'forminator' ),
+			'pagination_next'                => esc_html__( 'Next', 'forminator' ),
+			'pagination_go'                  => esc_html__( 'Submit', 'forminator' ),
+			'gateway'                        => array(
 				'processing' => esc_html__( 'Processing payment, please wait', 'forminator' ),
 				'paid'       => esc_html__( 'Success! Payment confirmed. Submitting form, please wait', 'forminator' ),
 				'error'      => esc_html__( 'Error! Something went wrong when verifying the payment', 'forminator' ),
 			),
-			'captcha_error'             => esc_html__( 'Invalid CAPTCHA', 'forminator' ),
-			'no_file_chosen'            => esc_html__( 'No file chosen', 'forminator' ),
+			'captcha_error'                  => esc_html__( 'Invalid CAPTCHA', 'forminator' ),
+			'no_file_chosen'                 => esc_html__( 'No file chosen', 'forminator' ),
 			// This is the file "/build/js/utils.js" found into intlTelInput plugin. Renamed so it makes sense within the "js/library" directory context.
-			'intlTelInput_utils_script' => forminator_plugin_url() . 'assets/js/library/intlTelInputUtils.js',
-			'process_error'             => esc_html__( 'Please try again', 'forminator' ),
-			'payment_failed'            => esc_html__( 'Payment failed. Please try again.', 'forminator' ),
-			'payment_cancelled'         => esc_html__( 'Payment was cancelled', 'forminator' ),
+			'intlTelInput_utils_script'      => forminator_plugin_url() . 'assets/js/library/intlTelInputUtils.js',
+			'process_error'                  => esc_html__( 'Please try again', 'forminator' ),
+			'payment_failed'                 => esc_html__( 'Payment failed. Please try again.', 'forminator' ),
+			'payment_cancelled'              => esc_html__( 'Payment was canceled', 'forminator' ),
+			'checkout_session_invalid'       => esc_html__( 'Your payment session was updated. Please try again.', 'forminator' ),
+			'payment_session_refresh_failed' => esc_html__( 'We could not refresh your payment session. Please refresh the page and try again.', 'forminator' ),
 		),
 		'poll'    => array(
 			'processing' => esc_html__( 'Submitting vote, please wait', 'forminator' ),
@@ -696,18 +697,23 @@ function forminator_has_turnstile_settings(): bool {
 }
 
 /**
- * Return if Stripe is is_connected
+ * Return if Stripe mode is configured
  *
- * @since 1.7
+ * @since 1.56.0
+ *
+ * @param string $mode Payment mode (test|live).
  * @return bool
  */
-function forminator_has_stripe_connected() {
+function forminator_is_stripe_mode_ready( $mode ) {
 	if ( class_exists( 'Forminator_Gateway_Stripe' ) ) {
 		try {
 			$stripe = new Forminator_Gateway_Stripe();
-			if ( $stripe->is_test_ready() && $stripe->is_live_ready() ) {
-				return true;
+
+			if ( 'live' === $mode ) {
+				return $stripe->is_live_ready();
 			}
+
+			return $stripe->is_test_ready();
 		} catch ( Forminator_Gateway_Exception $e ) {
 			return false;
 		}
@@ -715,6 +721,42 @@ function forminator_has_stripe_connected() {
 
 	return false;
 }
+
+/**
+ * Whether to show the Stripe developer widget for Enhanced Checkout in test mode.
+ *
+ * @since 1.56.0
+ *
+ * @param string $mode Stripe mode (test|live).
+ *
+ * @return bool
+ */
+function forminator_show_stripe_developer_widget( $mode = 'test' ) {
+	if ( 'test' !== $mode ) {
+		return false;
+	}
+
+	if (
+		filter_input( INPUT_POST, 'is_preview', FILTER_VALIDATE_BOOLEAN )
+		|| filter_input( INPUT_POST, 'is_block_editor', FILTER_VALIDATE_BOOLEAN )
+		|| ( is_admin() && ! wp_doing_ajax() )
+	) {
+		return false;
+	}
+
+	$show_widget = current_user_can( forminator_get_admin_cap() );
+
+	/**
+	 * Filter whether to show the Stripe developer widget in test mode on the frontend.
+	 *
+	 * @since 1.56.0
+	 *
+	 * @param bool   $show_widget Whether to show the widget.
+	 * @param string $mode        Stripe mode (test|live).
+	 */
+	return (bool) apply_filters( 'forminator_show_stripe_developer_widget', $show_widget, $mode );
+}
+
 /**
  * Return form ID
  *
@@ -1011,6 +1053,28 @@ function forminator_is_page_builder_preview() {
 	}
 
 	return $decision;
+}
+
+/**
+ * Detect a Divi 5 Visual Builder shortcode-render request
+ * (et_pb_preview endpoint with is_fb_preview set).
+ *
+ * @since 1.57.0
+ *
+ * @return bool
+ */
+function forminator_is_divi5_vb_shortcode_request() {
+	// phpcs:disable WordPress.Security.NonceVerification.Recommended -- nonce is verified below.
+	if ( ! isset( $_GET['et_pb_preview'] ) || ! isset( $_POST['is_fb_preview'] ) ) {
+		return false;
+	}
+
+	$nonce = isset( $_GET['et_pb_preview_nonce'] )
+		? sanitize_text_field( wp_unslash( $_GET['et_pb_preview_nonce'] ) )
+		: '';
+	// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+	return (bool) wp_verify_nonce( $nonce, 'et_pb_preview_nonce' );
 }
 
 /**
@@ -1420,6 +1484,7 @@ function forminator_reset_settings() {
 	delete_option( 'forminator_custom_upload_root' );
 	delete_option( 'forminator_stripe_configuration' );
 	delete_option( 'forminator_stripe_payment_intents' );
+	delete_option( 'forminator_stripe_checkout_sessions' );
 	delete_option( 'forminator_paypal_configuration' );
 	delete_option( 'forminator_usage_tracking' );
 	delete_option( 'forminator_auto_saving' );
@@ -1907,6 +1972,59 @@ function forminator_delete_permissions() {
 }
 
 /**
+ * Validate captcha placement in paginated forms.
+ *
+ * Ensures that if a form has pagination (page-breaks), then captcha field
+ * must be placed only on the last page. This prevents users from bypassing
+ * captcha validation by navigating past the captcha page.
+ *
+ * @param array $fields Form fields array from template.
+ * @return bool|WP_Error True if valid, WP_Error if captcha is not on last page.
+ *
+ * @since 1.55.0
+ */
+function forminator_validate_captcha_placement_in_paginated_forms( $fields ) {
+	// Track the last page-break and earliest captcha positions.
+	$last_page_break_position = -1;
+	$first_captcha_position   = -1;
+
+	foreach ( $fields as $wrapper_index => $wrapper ) {
+		if ( ! isset( $wrapper['fields'] ) || ! is_array( $wrapper['fields'] ) ) {
+			continue;
+		}
+
+		foreach ( $wrapper['fields'] as $field ) {
+			if ( ! isset( $field['type'] ) ) {
+				continue;
+			}
+
+			switch ( $field['type'] ) {
+				case 'page-break':
+					if ( $wrapper_index > $last_page_break_position ) {
+						$last_page_break_position = $wrapper_index;
+					}
+					break;
+
+				case 'captcha':
+					if ( -1 === $first_captcha_position || $wrapper_index < $first_captcha_position ) {
+						$first_captcha_position = $wrapper_index;
+					}
+					break;
+			}
+		}
+	}
+
+	if ( $first_captcha_position < $last_page_break_position ) {
+		return new WP_Error(
+			'captcha_placement_invalid',
+			esc_html__( 'Captcha can only be placed on the last page in a paginated form.', 'forminator' )
+		);
+	}
+
+	return true;
+}
+
+/**
  * Searches for $needle in the multidimensional array $haystack.
  *
  * @url https://stackoverflow.com/a/28473219
@@ -1988,18 +2106,19 @@ function forminator_check_registration_form_permissions( $settings ) {
 		}
 
 		$roles = forminator_get_accessible_user_roles();
-		if ( isset( $settings['registration-user-role'] ) && 'fixed' === $settings['registration-user-role'] ) {
-			if ( isset( $settings['registration-role-field'] ) && ! isset( $roles[ $settings['registration-role-field'] ] )
-				&& 'notCreate' !== $settings['registration-role-field'] ) { // Respect the "Don't create a user in the network's main site" option.
-				return new WP_Error( 'invalid_user_role', $error_message );
-			}
-		} elseif ( ! empty( $settings['user_role'] ) && is_array( $settings['user_role'] ) ) {
-			foreach ( $settings['user_role'] as $user_role ) {
-				if ( isset( $user_role['role'] ) && ! isset( $roles[ $user_role['role'] ] )
-					&& 'notCreate' !== $user_role['role'] ) { // Respect the "Don't create a user in the network's main site" option.
-					return new WP_Error( 'invalid_user_role', $error_message );
+		// Registration honours the conditional roles only for the `conditionally` mode, any other value assigns the fixed role.
+		if ( isset( $settings['registration-user-role'] ) && 'conditionally' === $settings['registration-user-role'] ) {
+			if ( ! empty( $settings['user_role'] ) && is_array( $settings['user_role'] ) ) {
+				foreach ( $settings['user_role'] as $user_role ) {
+					if ( isset( $user_role['role'] ) && ! isset( $roles[ $user_role['role'] ] )
+						&& 'notCreate' !== $user_role['role'] ) { // Respect the "Don't create a user in the network's main site" option.
+						return new WP_Error( 'invalid_user_role', $error_message );
+					}
 				}
 			}
+		} elseif ( isset( $settings['registration-role-field'] ) && ! isset( $roles[ $settings['registration-role-field'] ] )
+			&& 'notCreate' !== $settings['registration-role-field'] ) { // Respect the "Don't create a user in the network's main site" option.
+			return new WP_Error( 'invalid_user_role', $error_message );
 		}
 	}
 	return true;
@@ -2171,4 +2290,87 @@ function forminator_is_site_registration_enabled() {
 		}
 	}
 	return false;
+}
+
+/**
+ * Get the WPMU DEV server base URL with an optional path appended.
+ *
+ * Respects the WPMUDEV_CUSTOM_API_SERVER constant for staging/testing overrides.
+ *
+ * @since 1.56.0
+ *
+ * @param string $path Optional path to append to the base URL.
+ *
+ * @return string Full URL.
+ */
+function forminator_get_server_url( string $path = '' ): string {
+	$base = 'https://wpmudev.com/';
+
+	if ( defined( 'WPMUDEV_CUSTOM_API_SERVER' ) && ! empty( WPMUDEV_CUSTOM_API_SERVER ) ) {
+		$base = trailingslashit( WPMUDEV_CUSTOM_API_SERVER );
+	}
+
+	return $base . $path;
+}
+
+/**
+ * Unserialize data without instantiating PHP objects.
+ *
+ * Entry meta and similar visitor-influenced values must not use maybe_unserialize(),
+ * which allows arbitrary class instantiation (PHP Object Injection).
+ *
+ * @since 1.57.2
+ *
+ * @param mixed $data Data that might be serialized.
+ * @return mixed Unserialized data with objects blocked, the original value if not serialized, or false on failure / rejected object payloads.
+ */
+function forminator_safe_maybe_unserialize( $data ) {
+	if ( ! is_serialized( $data ) ) {
+		return $data;
+	}
+
+	$data = trim( $data );
+
+	// Reject top-level object / enum payloads without touching unserialize().
+	// Note: 'C' is already blocked by is_serialized(); 'E' is not covered by allowed_classes => false.
+	// Return false (same as a failed unserialize) so callers that index the result as an array
+	// keep the previous soft-fail behavior instead of TypeError on a string.
+	$token = $data[0];
+	if ( 'O' === $token || 'E' === $token ) {
+		return false;
+	}
+
+	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize, WordPress.PHP.NoSilencedErrors.Discouraged -- allowed_classes false blocks object injection; silence matches WP maybe_unserialize().
+	$unserialized = @unserialize( $data, array( 'allowed_classes' => false ) );
+
+	// Distinguish failed unserialize from a stored boolean false (`b:0;`).
+	if ( false === $unserialized && 'b:0;' !== $data ) {
+		return false;
+	}
+
+	return forminator_strip_incomplete_classes( $unserialized );
+}
+
+/**
+ * Replace __PHP_Incomplete_Class instances with an empty string.
+ *
+ * Produced when unserialize() encounters disallowed classes.
+ *
+ * @since 1.57.2
+ *
+ * @param mixed $value Value that may contain incomplete class instances.
+ * @return mixed Value with incomplete classes removed.
+ */
+function forminator_strip_incomplete_classes( $value ) {
+	if ( $value instanceof __PHP_Incomplete_Class ) {
+		return '';
+	}
+
+	if ( is_array( $value ) ) {
+		foreach ( $value as $key => $item ) {
+			$value[ $key ] = forminator_strip_incomplete_classes( $item );
+		}
+	}
+
+	return $value;
 }

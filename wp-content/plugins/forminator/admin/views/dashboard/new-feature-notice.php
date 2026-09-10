@@ -8,17 +8,6 @@
 $user      = wp_get_current_user();
 $banner_1x = forminator_plugin_url() . 'assets/images/Feature_highlight.png';
 $banner_2x = forminator_plugin_url() . 'assets/images/Feature_highlight@2x.png';
-$url       = add_query_arg(
-	array(
-		'page'        => 'forminator-templates',
-		'feature'     => 'preset-template',
-		'from'        => 'new-features-modal',
-		'page_action' => 'hub_connection',
-	),
-	admin_url( 'admin.php' )
-);
-
-$hub_connected = Forminator_Hub_Connector::hub_connector_connected();
 ?>
 
 <div class="sui-modal sui-modal-md">
@@ -32,7 +21,7 @@ $hub_connected = Forminator_Hub_Connector::hub_connector_connected();
 		aria-labelledby="forminator-new-feature__title"
 	>
 
-		<div class="sui-box forminator-feature-modal" data-prop="forminator_dismiss_feature_1490"
+		<div class="sui-box forminator-feature-modal" data-prop="forminator_dismiss_feature_1570"
 			data-nonce="<?php echo esc_attr( wp_create_nonce( 'forminator_dismiss_notification' ) ); ?>">
 
 			<div class="sui-box-header sui-flatten sui-content-center">
@@ -52,26 +41,62 @@ $hub_connected = Forminator_Hub_Connector::hub_connector_connected();
 
 				<h3 class="sui-box-title sui-lg" style="overflow: initial; white-space: initial; text-overflow: initial;">
 				<?php
-					esc_html_e( 'New! Form Editor & Instant Preview', 'forminator' );
+					esc_html_e( 'Introduce Sequential Submission IDs', 'forminator' );
 				?>
 				</h3>
 
 				<p class="sui-description">
 				<?php
-				printf(
-					/* translators: 1. Admin name */
-					esc_html__( 'Hey %s! We\'re excited to introduce the first phase of our Form Editor improvements. You\'ll notice a refreshed design and a new instant preview in the Appearance section, allowing you to see your changes as you customize your form. Check it out and let us know what you think!', 'forminator' ),
-					esc_html( ucfirst( $user->display_name ) ),
-				);
+					esc_html_e( 'You can now generate custom, form-specific sequential IDs for every submission. Instead of global submission counters that jump across different forms.', 'forminator' );
 				?>
 				</p>
+				<p></p>
 
+				<div class="sui-modal-list" style="text-align: left; background-color: #F8F8F8; padding: 15px; border-radius: 5px;">
+					<ul style="margin: 0; line-height: 22px;">
+
+						<li style="line-height: 22px; margin-bottom: 10px;">
+							<h3 style="margin-bottom: 0; display: inline;">
+								<?php esc_html_e( 'Now (Custom Prefixes & Starting Numbers):', 'forminator' ); ?>
+							</h3>
+							<p class="sui-description" style="display: inline;">
+								<?php esc_html_e( 'Every form maintains its own sequence. With option to add your own prefix (e.g., INV-) and set exact starting numbers.', 'forminator' ); ?>
+							</p>
+						</li>
+
+						<li style="line-height: 22px; margin-bottom: 10px;">
+							<h3 style="margin-bottom: 0; display: inline;">
+								<?php esc_html_e( 'Unified Display:', 'forminator' ); ?>
+							</h3>
+							<p class="sui-description" style="display: inline;">
+								<?php esc_html_e( 'Custom IDs reflect seamlessly across your email notifications, submission logs, CSV exports, and PDFs.', 'forminator' ); ?>
+							</p>
+						</li>
+
+						<li style="line-height: 22px;">
+							<h3 style="margin-bottom: 0; display: inline;">
+								<?php esc_html_e( 'Enabled by Default for New Forms:', 'forminator' ); ?>
+							</h3>
+							<p class="sui-description" style="display: inline;">
+								<?php
+								printf(
+									/* translators: 1. Bold text. 2. Bold text. */
+									esc_html__( 'All newly created forms will use sequential numbering automatically. You can also turn it on anytime for existing forms in %1$sForm Settings → Sequential Form ID%2$s.', 'forminator' ),
+									'<b>',
+									'</b>'
+								);
+								?>
+							</p>
+						</li>
+
+					</ul>
+				</div>
 			</div>
 
 			<div class="sui-box-footer sui-flatten sui-content-center">
 
 				<button class="sui-button forminator-dismiss-new-feature" data-modal-close>
-					<?php esc_html_e( 'Got it', 'forminator' ); ?>
+					<?php esc_html_e( 'Got it!', 'forminator' ); ?>
 				</button>
 
 			</div>

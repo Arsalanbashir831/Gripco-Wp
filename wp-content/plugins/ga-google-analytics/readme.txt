@@ -9,9 +9,9 @@ Author URI: https://plugin-planet.com/
 Donate link: https://monzillamedia.com/donate.html
 Contributors: specialk
 Requires at least: 4.7
-Tested up to: 7.0
-Stable tag: 20260421
-Version:    20260421
+Tested up to: 7.1
+Stable tag: 20260810
+Version:    20260810
 Requires PHP: 5.6.20
 Text Domain: ga-google-analytics
 Domain Path: /languages
@@ -325,6 +325,11 @@ If you like GA Google Analytics, please take a moment to [give a 5-star rating](
 
 > ✨ Pro version available! Check out [GA Pro &raquo;](https://plugin-planet.com/ga-google-analytics-pro/)
 
+
+**20260810**
+
+* Updates plugin settings page
+* Tests on WordPress 7.1
 
 **20260421**
 

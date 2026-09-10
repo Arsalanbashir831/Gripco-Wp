@@ -213,7 +213,7 @@ class Forminator_Currency extends Forminator_Field {
 				$descr_position,
 				array(
 					'<div class="forminator-input-with-suffix">',
-					sprintf( '<span class="forminator-suffix">%s</span></div>', $currency ),
+					sprintf( '<span class="forminator-suffix">%s</span></div>', esc_html( $currency ) ),
 					'',
 				)
 			);

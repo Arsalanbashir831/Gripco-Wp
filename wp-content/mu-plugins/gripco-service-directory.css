@@ -1,0 +1,12 @@
+.gripco-directory{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;width:100%;text-align:left}
+.gripco-directory .gripco-directory__card{background:#fff;border:1px solid #e4ebe4;border-top:4px solid #379237;border-radius:8px;padding:28px;box-shadow:0 6px 24px #1738170a;min-width:0}
+.gripco-directory h3{font-family:Heebo,sans-serif;font-size:22px;line-height:1.35;margin:0 0 18px;font-weight:700}
+.gripco-directory a{color:#263529;text-decoration:none;overflow-wrap:anywhere}
+.gripco-directory h3 a{color:#28762b}
+.gripco-directory a:hover{text-decoration:underline;color:#216524}
+.gripco-directory a:focus-visible{outline:2px solid #28762b;outline-offset:4px}
+.gripco-directory ul{list-style:disc;margin:0;padding-left:20px;color:#379237}
+.gripco-directory li{font-family:Mukta,sans-serif;font-size:17px;line-height:1.5;margin:0;padding:5px 0}
+.gripco-directory li ul{margin-top:6px;padding-left:18px;list-style:circle}
+@media(max-width:1024px){.gripco-directory{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}}
+@media(max-width:600px){.gripco-directory{grid-template-columns:minmax(0,1fr);gap:16px}.gripco-directory .gripco-directory__card{padding:24px}.gripco-directory h3{font-size:21px}}

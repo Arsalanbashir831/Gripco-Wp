@@ -51,7 +51,7 @@ foreach ( $this->entries_iterator() as $entries ) {
 
 				echo '<td class="sui-accordion-item-title">';
 
-					echo '<label class="sui-checkbox">';
+					echo '<label class="sui-checkbox sui-accordion-item-action">';
 
 						echo '<input type="checkbox" name="ids[]" value="' . esc_attr( $db_entry_id ) . '" id="quiz-answer-' . esc_attr( $db_entry_id ) . '" />';
 
@@ -207,16 +207,26 @@ foreach ( $this->entries_iterator() as $entries ) {
 
 										<?php foreach ( $meta as $answer ) : ?>
 
-											<?php $user_answer = $answer['answer']; ?>
+											<?php
+											// Handle both single answer ('answer' key) and multiple answers ('answers' array key).
+											if ( isset( $answer['answer'] ) ) {
+												$user_answer = $answer['answer'];
+											} else {
+												$user_answer = isset( $answer['answers'] ) ? $answer['answers'] : '';
+											}
+											?>
 
 											<tr>
 												<td><strong><?php echo esc_html( $answer['question'] ); ?></strong></td>
 												<td>
 													<?php
-													if ( $answer['isCorrect'] ) {
-														echo '<span class="sui-tag sui-tag-success">' . esc_html( $user_answer ) . '</span>';
+													$tag_class = $answer['isCorrect'] ? 'sui-tag-success' : 'sui-tag-error';
+													if ( is_array( $user_answer ) ) {
+														foreach ( $user_answer as $val ) {
+															echo '<span class="sui-tag ' . esc_attr( $tag_class ) . '">' . esc_html( $val ) . '</span>';
+														}
 													} else {
-														echo '<span class="sui-tag sui-tag-error">' . esc_html( $user_answer ) . '</span>';
+														echo '<span class="sui-tag ' . esc_attr( $tag_class ) . '">' . esc_html( $user_answer ) . '</span>';
 													}
 													?>
 												</td>
